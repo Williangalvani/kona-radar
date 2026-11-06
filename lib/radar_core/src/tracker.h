@@ -32,7 +32,7 @@ class Tracker {
   // Merges a fresh download received at local time `nowMs`.
   void update(const std::vector<Aircraft>& reports, uint32_t nowMs);
 
-  // Removes tracks not reported for longer than `staleMs`.
+  // Removes tracks whose last known position is older than `staleMs`.
   void expire(uint32_t nowMs, uint32_t staleMs);
 
   // Best estimate of where the aircraft is at `nowMs`.

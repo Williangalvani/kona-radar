@@ -51,7 +51,7 @@ void Tracker::update(const std::vector<Aircraft>& reports, uint32_t nowMs) {
 
 void Tracker::expire(uint32_t nowMs, uint32_t staleMs) {
   tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
-                               [&](const Track& t) { return nowMs - t.lastSeenMs > staleMs; }),
+                               [&](const Track& t) { return nowMs - t.posTimeMs > staleMs; }),
                 tracks_.end());
 }
 

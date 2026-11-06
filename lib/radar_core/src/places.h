@@ -8,14 +8,25 @@
 
 namespace radar {
 
+// One runway with its two landing thresholds.
+struct Runway {
+  const char* ident[2];  // e.g. {"17", "35"}
+  LatLon threshold[2];   // threshold of ident[0], threshold of ident[1]
+};
+
 struct Place {
   const char* code;
   const char* name;
   LatLon pos;
+  const Runway* runways = nullptr;
+  size_t runwayCount = 0;
 };
 
 extern const Place kAirports[];
 extern const size_t kAirportCount;
+
+// The airport within 3 NM of `pos`, or nullptr.
+const Place* airportNear(const LatLon& pos);
 
 struct CoastPolygon {
   const char* name;

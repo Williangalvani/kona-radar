@@ -3,7 +3,9 @@
 #include <unity.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -15,12 +17,14 @@
 #include "rotation.h"
 #include "settings.h"
 #include "tracker.h"
+#include "traffic.h"
 
 using namespace radar;
 
 static const LatLon kQueryPoint{19.739, -156.046};  // point the fixtures were fetched for
-static const LatLon kKoa{19.7388, -156.0456};
-static const LatLon kBalcony{19.700000, -156.000000};
+static const LatLon kKoa{19.738765, -156.045631};
+// A made-up observer 4 NM east-southeast of the airport, facing it.
+static const LatLon kObserver = destination(kKoa, 115, 4.0);
 
 void setUp() {}
 void tearDown() {}
@@ -179,11 +183,17 @@ void test_geo_basics() {
   TEST_ASSERT_DOUBLE_WITHIN(2.0, 91.0, bearingDeg(kKoa, kAirports[1].pos));
 }
 
-void test_balcony_to_koa() {
-  // The user measured a few km at a bearing of ~281 deg.
-  const double km = distanceNm(kBalcony, kKoa) * 1.852;
-  TEST_ASSERT_DOUBLE_WITHIN(0.15, 6.0, km);
-  TEST_ASSERT_DOUBLE_WITHIN(1.0, 281.0, bearingDeg(kBalcony, kKoa));
+void test_airport_and_runway_data() {
+  const Place* koa = airportNear({19.74, -156.04});
+  TEST_ASSERT_NOT_NULL(koa);
+  TEST_ASSERT_EQUAL_STRING("KOA", koa->code);
+  TEST_ASSERT_NULL(airportNear({19.5, -156.5}));
+  TEST_ASSERT_EQUAL(1, koa->runwayCount);
+  const Runway& rw = koa->runways[0];
+  // Runway 17/35 is 11,000 ft long and points 170/350 magnetic (~180 true).
+  TEST_ASSERT_DOUBLE_WITHIN(0.05, 11000.0 / kFeetPerNm, distanceNm(rw.threshold[0], rw.threshold[1]));
+  TEST_ASSERT_DOUBLE_WITHIN(1.0, 185.0, bearingDeg(rw.threshold[0], rw.threshold[1]));
+  TEST_ASSERT_TRUE(distanceNm(koa->pos, rw.threshold[0]) < 1.0);
 }
 
 void test_projection_north_up() {
@@ -215,15 +225,15 @@ void test_projection_view_aligned() {
   p.center = kKoa;
   p.rangeNm = 10;
   p.radiusPx = 200;
-  p.upBearingDeg = 281;  // facing from the balcony toward KOA
+  p.upBearingDeg = 281;  // an observer east of KOA facing it
   float x, y;
   // Something due 281 deg from the center is drawn straight up...
   p.polar(5, 281, x, y);
   TEST_ASSERT_FLOAT_WITHIN(1e-3, 233, x);
   TEST_ASSERT_FLOAT_WITHIN(1e-3, 133, y);
-  // ...and the balcony (behind you, ~101 deg from KOA) straight down.
+  // ...and a point behind you (101 deg from KOA) straight down.
   double d, b;
-  p.project(kBalcony, x, y, &d, &b);
+  p.project(destination(kKoa, 101, 4.0), x, y, &d, &b);
   TEST_ASSERT_FLOAT_WITHIN(2.0, 233, x);
   TEST_ASSERT_TRUE(y > 233 + 60);
   TEST_ASSERT_DOUBLE_WITHIN(0.01, 79.0, p.screenAngle(0));  // north shows up 79 deg clockwise
@@ -236,8 +246,8 @@ void test_projection_view_aligned() {
 
 void test_look_angles() {
   // 10 NM away at 6,076 ft: ~5.6 deg up after curvature.
-  LatLon tgt = destination(kBalcony, 281, 10.0);
-  LookAngles la = lookAngles(kBalcony, 0, tgt, 6076.12);
+  LatLon tgt = destination(kObserver, 281, 10.0);
+  LookAngles la = lookAngles(kObserver, 0, tgt, 6076.12);
   TEST_ASSERT_DOUBLE_WITHIN(1e-6, 10.0, la.groundDistNm);
   TEST_ASSERT_DOUBLE_WITHIN(0.01, 281.0, la.bearingDeg);
   TEST_ASSERT_DOUBLE_WITHIN(0.15, rad2deg(std::atan(0.1)) - 0.07, la.elevationDeg);
@@ -245,8 +255,8 @@ void test_look_angles() {
   // Overhead-ish traffic is high in the sky; far, low traffic is below the horizon.
   // 0.5 NM out at 5,000 ft (4,900 ft above the eye): atan(4900 / 3038) = 58.2 deg.
   TEST_ASSERT_DOUBLE_WITHIN(0.3, 58.2,
-                            lookAngles(kBalcony, 100, destination(kBalcony, 0, 0.5), 5000).elevationDeg);
-  TEST_ASSERT_TRUE(lookAngles(kBalcony, 100, destination(kBalcony, 0, 150), 500).elevationDeg < 0);
+                            lookAngles(kObserver, 100, destination(kObserver, 0, 0.5), 5000).elevationDeg);
+  TEST_ASSERT_TRUE(lookAngles(kObserver, 100, destination(kObserver, 0, 150), 500).elevationDeg < 0);
 }
 
 // ---------------------------------------------------------------- tracker
@@ -356,7 +366,7 @@ void test_format() {
   Aircraft b;
   std::strcpy(b.callsign, "ASA1037");
   std::strcpy(b.owner, "HAWAIIAN AIRLINES INC");
-  TEST_ASSERT_EQUAL_STRING("Alaska Airlines", operatorName(b, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("Alaska", operatorName(b, buf, sizeof buf));
   std::strcpy(b.callsign, "N476HA");  // registration-style callsign: use owner
   TEST_ASSERT_EQUAL_STRING("Hawaiian Airlines Inc", operatorName(b, buf, sizeof buf));
 
@@ -366,6 +376,144 @@ void test_format() {
   TEST_ASSERT_EQUAL(-1, verticalTrend(c));
   c.vertRateFpm = 100;
   TEST_ASSERT_EQUAL(0, verticalTrend(c));
+
+  TEST_ASSERT_EQUAL_STRING("RIGHT 42\u00b0", relativeDirection(42.4, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("LEFT 36\u00b0", relativeDirection(-36.2, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("AHEAD", relativeDirection(-6, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("BEHIND", relativeDirection(170, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("", relativeDirection(NAN, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("LOOK RIGHT", lookCue(36, 0, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("LOOK LEFT", lookCue(-90, 0, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("LOOK NW", lookCue(NAN, 305, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("~3 MIN", etaText(141, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("~1 MIN", etaText(45, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("NOW", etaText(10, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("NW 305\u00b0T", bearingText(305.3, buf, sizeof buf));
+  TEST_ASSERT_EQUAL_STRING("N 005\u00b0T", bearingText(365, buf, sizeof buf));
+}
+
+// ---------------------------------------------------------------- traffic
+
+// The example traffic from docs/design/manifest.json.
+static Aircraft designAircraft(const char* cs, double lat, double lon, int alt, float gs,
+                               float trk, int vr, const char* type) {
+  Aircraft a;
+  std::snprintf(a.hex, sizeof a.hex, "%06x", static_cast<unsigned>(std::hash<std::string>{}(cs) & 0xffffff));
+  std::strcpy(a.callsign, cs);
+  std::strcpy(a.type, type);
+  a.lat = lat;
+  a.lon = lon;
+  a.hasAlt = true;
+  a.altFt = alt;
+  a.hasGs = true;
+  a.gsKt = gs;
+  a.hasTrack = true;
+  a.trackDeg = trk;
+  a.hasVertRate = vr != 0;
+  a.vertRateFpm = vr;
+  return a;
+}
+
+// Feeds `a` at `nowMs` after a report 12 s earlier along its track, so the
+// tracker has one history point, as it would after a couple of downloads.
+static void feed(Tracker& t, std::vector<Aircraft> list, uint32_t nowMs, float ageS = 0) {
+  std::vector<Aircraft> before = list;
+  for (Aircraft& b : before) {
+    const LatLon p = destination({b.lat, b.lon}, b.trackDeg + 180, b.gsKt * 12.0 / 3600.0);
+    b.lat = p.lat;
+    b.lon = p.lon;
+    b.seenPosS = ageS;
+  }
+  for (Aircraft& a : list) a.seenPosS = ageS;
+  t.update(before, nowMs - 12000);
+  t.update(list, nowMs);
+}
+
+static std::vector<Aircraft> designTraffic() {
+  return {designAircraft("HAL208", 19.840, -156.036, 1900, 132, 185, -600, "B712"),
+          designAircraft("SWA250", 19.786, -156.043, 2300, 155, 5, 1400, "B38M"),
+          designAircraft("ASA875", 19.700, -156.125, 4400, 210, 55, -700, "A21N"),
+          designAircraft("HAL123", 19.670, -156.052, 3600, 178, 5, -500, "A332"),
+          designAircraft("MHO507", 19.759, -155.951, 2800, 110, 210, 0, "C208"),
+          designAircraft("N123BH", 19.707, -156.025, 900, 85, 340, 0, "EC30")};
+}
+
+static const Target* findTarget(const std::vector<Target>& v, const char* cs) {
+  for (const Target& g : v)
+    if (std::strcmp(g.track->ac.callsign, cs) == 0) return &g;
+  return nullptr;
+}
+
+void test_traffic_arrival_departure_cues() {
+  Tracker t;
+  feed(t, designTraffic(), 100000);
+  Settings s = Settings::defaults();
+  s.observerLat = kObserver.lat;
+  s.observerLon = kObserver.lon;
+  std::vector<Target> targets;
+  TrafficSummary sum;
+  analyzeTraffic(t, s, 100000, targets, sum);
+  TEST_ASSERT_EQUAL(6, targets.size());
+
+  const Target* hal = findTarget(targets, "HAL208");
+  TEST_ASSERT_EQUAL(FlightPhase::Arrival, hal->cue.phase);
+  TEST_ASSERT_EQUAL_STRING("17", hal->cue.runway);
+  // ~5.2 NM to the runway 17 threshold at 132 kt.
+  TEST_ASSERT_FLOAT_WITHIN(6, 142, hal->cue.etaS);
+  TEST_ASSERT_EQUAL(hal - targets.data(), sum.nextArrival);
+
+  const Target* swa = findTarget(targets, "SWA250");
+  TEST_ASSERT_EQUAL(FlightPhase::Departure, swa->cue.phase);
+  TEST_ASSERT_EQUAL_STRING("35", swa->cue.runway);
+
+  // Aligned with runway 35 but far too high for an approach.
+  TEST_ASSERT_EQUAL(FlightPhase::Cruise, findTarget(targets, "HAL123")->cue.phase);
+  TEST_ASSERT_EQUAL(FlightPhase::Cruise, findTarget(targets, "ASA875")->cue.phase);
+  TEST_ASSERT_EQUAL(FlightPhase::Helicopter, findTarget(targets, "N123BH")->cue.phase);
+
+  // Facing defaults to "toward the airport" once the observer is set.
+  TEST_ASSERT_TRUE(s.observerSet());
+  TEST_ASSERT_DOUBLE_WITHIN(0.5, 295.0, s.facingBearing());
+  TEST_ASSERT_DOUBLE_WITHIN(1e-6, wrap180(hal->bearingDeg - s.facingBearing()), hal->relDeg);
+  TEST_ASSERT_TRUE(hal->relDeg > 0);  // north of the airport: to the right
+  TEST_ASSERT_DOUBLE_WITHIN(1e-6, distanceNm(kObserver, hal->pos), hal->distNm);
+  TEST_ASSERT_EQUAL(6, sum.inRange + sum.outside);
+}
+
+void test_traffic_needs_history_and_fresh_data() {
+  Settings s = Settings::defaults();
+  std::vector<Target> targets;
+  TrafficSummary sum;
+  const Aircraft hal = designTraffic()[0];
+
+  // A single report cannot show the aircraft is closing on the runway.
+  Tracker once;
+  once.update({hal}, 1000);
+  analyzeTraffic(once, s, 1000, targets, sum);
+  TEST_ASSERT_EQUAL(FlightPhase::Cruise, targets[0].cue.phase);
+  TEST_ASSERT_EQUAL(-1, sum.nextArrival);
+  // Observer not set: no relative direction, north-up.
+  TEST_ASSERT_TRUE(std::isnan(targets[0].relDeg));
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 0.0, s.effectiveUpBearing());
+
+  // 45 s old: muted but still an arrival. 70 s: no estimate. 200 s: gone.
+  Tracker t;
+  feed(t, {hal}, 100000, 45);
+  analyzeTraffic(t, s, 100000, targets, sum);
+  TEST_ASSERT_TRUE(targets[0].stale);
+  TEST_ASSERT_EQUAL(FlightPhase::Arrival, targets[0].cue.phase);
+  analyzeTraffic(t, s, 125000, targets, sum);
+  TEST_ASSERT_EQUAL(FlightPhase::Cruise, targets[0].cue.phase);
+  analyzeTraffic(t, s, 260000, targets, sum);
+  TEST_ASSERT_EQUAL(0, targets.size());
+
+  // Climbing on the approach course is not an arrival.
+  Aircraft climbing = hal;
+  climbing.vertRateFpm = 1200;
+  Tracker c;
+  feed(c, {climbing}, 100000);
+  analyzeTraffic(c, s, 100000, targets, sum);
+  TEST_ASSERT_TRUE(targets[0].cue.phase != FlightPhase::Arrival);
 }
 
 // ---------------------------------------------------------------- rotation
@@ -411,15 +559,27 @@ void test_rotation_consistency() {
 
 void test_settings_defaults_and_json() {
   Settings s = Settings::defaults();
-  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 19.700000, s.observerLat);
-  TEST_ASSERT_DOUBLE_WITHIN(1e-9, -156.000000, s.observerLon);
-  TEST_ASSERT_EQUAL(281, s.viewBearingDeg);
-  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 281.0, s.effectiveUpBearing());
+  // Neutral default: the observer is the airport itself, i.e. not set.
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, s.centerLat, s.observerLat);
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, s.centerLon, s.observerLon);
+  TEST_ASSERT_FALSE(s.observerSet());
+  TEST_ASSERT_EQUAL(-1, s.viewBearingDeg);
+  TEST_ASSERT_TRUE(std::isnan(s.facingBearing()));
+  TEST_ASSERT_EQUAL(10, s.rangeNm);
   TEST_ASSERT_EQUAL_STRING("KOA", s.centerName);
 
-  // Auto view bearing = observer -> center.
+  // Auto facing = observer -> center; an explicit bearing wins; north-up
+  // overrides what is drawn at the top but not the facing direction.
+  s.observerLat = kObserver.lat;
+  s.observerLon = kObserver.lon;
+  TEST_ASSERT_DOUBLE_WITHIN(0.5, 295.0, s.effectiveUpBearing());
+  s.viewBearingDeg = 281;
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 281.0, s.effectiveUpBearing());
+  s.northUp = 1;
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 0.0, s.effectiveUpBearing());
+  TEST_ASSERT_DOUBLE_WITHIN(1e-9, 281.0, s.facingBearing());
+  s.northUp = 0;
   s.viewBearingDeg = -1;
-  TEST_ASSERT_DOUBLE_WITHIN(1.0, 281.0, s.effectiveUpBearing());
 
   std::string json = settingsToJson(s);
   Settings r = Settings::defaults();
@@ -430,15 +590,18 @@ void test_settings_defaults_and_json() {
 
   // Partial update with out-of-range values gets clamped / snapped.
   const char* upd = R"({"rangeNm": 30, "refreshS": 0, "brightness": -5, "viewBearingDeg": 450,
-                       "observerLat": 19.5, "centerName": "itO!", "screenRotation": 9})";
+                       "observerLat": 19.5, "centerName": "itO!", "screenRotation": 9,
+                       "northUp": true, "nightMode": 7})";
   TEST_ASSERT_TRUE(settingsFromJson(upd, std::strlen(upd), r));
-  TEST_ASSERT_EQUAL(25, r.rangeNm);
+  TEST_ASSERT_EQUAL(20, r.rangeNm);
+  TEST_ASSERT_EQUAL(1, r.northUp);
+  TEST_ASSERT_EQUAL(2, r.nightMode);
   TEST_ASSERT_EQUAL(2, r.refreshS);
   TEST_ASSERT_EQUAL(5, r.brightness);
   TEST_ASSERT_EQUAL(90, r.viewBearingDeg);
   TEST_ASSERT_EQUAL(3, r.screenRotation);
   TEST_ASSERT_DOUBLE_WITHIN(1e-9, 19.5, r.observerLat);
-  TEST_ASSERT_DOUBLE_WITHIN(1e-9, -156.000000, r.observerLon);  // untouched
+  TEST_ASSERT_DOUBLE_WITHIN(1e-5, kObserver.lon, r.observerLon);  // untouched
   TEST_ASSERT_EQUAL_STRING("ITO", r.centerName);
 
   // Garbage is rejected without modifying the settings.
@@ -453,17 +616,17 @@ void test_settings_diff_stores_only_changes() {
   TEST_ASSERT_EQUAL_STRING("{}", settingsDiffToJson(def, def).c_str());
 
   Settings s = def;
-  s.rangeNm = 50;
+  s.rangeNm = 20;
   s.observerLat = 19.7;
   const std::string diff = settingsDiffToJson(s, def);
-  TEST_ASSERT_EQUAL_STRING(R"({"observerLat":19.7,"rangeNm":50})", diff.c_str());
+  TEST_ASSERT_EQUAL_STRING(R"({"observerLat":19.7,"rangeNm":20})", diff.c_str());
 
   // Loading the diff over (possibly newer) defaults restores the changes and
   // keeps every other default.
   Settings newer = def;
   newer.brightness = 60;
   TEST_ASSERT_TRUE(settingsFromJson(diff.data(), diff.size(), newer));
-  TEST_ASSERT_EQUAL(50, newer.rangeNm);
+  TEST_ASSERT_EQUAL(20, newer.rangeNm);
   // ArduinoJson parses decimals with <= 7 significant digits as float
   // (~0.2 m of latitude here), longer ones as double.
   TEST_ASSERT_DOUBLE_WITHIN(1e-5, 19.7, newer.observerLat);
@@ -503,7 +666,7 @@ int main(int, char**) {
   RUN_TEST(test_parse_respects_max);
   RUN_TEST(test_geo_matches_server_dst_dir);
   RUN_TEST(test_geo_basics);
-  RUN_TEST(test_balcony_to_koa);
+  RUN_TEST(test_airport_and_runway_data);
   RUN_TEST(test_projection_north_up);
   RUN_TEST(test_projection_view_aligned);
   RUN_TEST(test_look_angles);
@@ -511,6 +674,8 @@ int main(int, char**) {
   RUN_TEST(test_tracker_ground_and_no_speed_do_not_move);
   RUN_TEST(test_tracker_merge_trail_and_expire);
   RUN_TEST(test_format);
+  RUN_TEST(test_traffic_arrival_departure_cues);
+  RUN_TEST(test_traffic_needs_history_and_fresh_data);
   RUN_TEST(test_rotation_consistency);
   RUN_TEST(test_settings_defaults_and_json);
   RUN_TEST(test_settings_diff_stores_only_changes);
