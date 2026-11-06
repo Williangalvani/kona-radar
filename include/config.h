@@ -93,6 +93,11 @@
 #ifndef RADAR_SWEEP_PERIOD_S
 #define RADAR_SWEEP_PERIOD_S 6
 #endif
+// Sweep animation frame rate. Each sweep frame repaints the beam's afterglow
+// sector (~45k pixels), so this is the main knob for display bandwidth.
+#ifndef RADAR_SWEEP_FPS
+#define RADAR_SWEEP_FPS 25
+#endif
 // Normal brightness in percent (runtime).
 #ifndef RADAR_DEFAULT_BRIGHTNESS
 #define RADAR_DEFAULT_BRIGHTNESS 80
