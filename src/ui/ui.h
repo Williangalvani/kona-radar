@@ -1,18 +1,19 @@
-// Screen manager: owns every LVGL object, shows the screen that matches
-// Model::phase, and turns touches into Actions. Restyle via theme.h; the
-// layout constants live in ui.cpp.
+// Screen manager: owns every screen, shows the one that matches the Model,
+// rebuilds them when the day/night palette changes, and turns raw touch
+// into taps, swipes and the 5-second "reset Wi-Fi" hold.
 #pragma once
 
 #include <lvgl.h>
 
+#include <memory>
 #include <string>
 
-#include "radar_view.h"
+#include "screens.h"
 #include "ui_model.h"
 
 namespace ui {
 
-class Ui {
+class Ui : public Nav {
  public:
   bool begin(Actions* actions);
   // Call every loop iteration (before lv_timer_handler).
@@ -20,90 +21,54 @@ class Ui {
   // Burn-in protection: moves everything by a few pixels.
   void setPixelShift(int dx, int dy);
 
-  // Used by the simulator to reach screens without touch input.
-  void openDetails(const char* hex);
-  void openSettings();
-  void closeOverlays();
-  const char* selectedAircraft() const { return radar_.selected(); }
+  // Nav (also used by the simulator to reach screens directly).
+  void openDetail(const std::string& hex) override;
+  void openAlignment() override;
+  void openPhoneLink() override;
+  void back() override;
+  void selectAircraft(const std::string& hex) { radar_.select(hex); }
+  const std::string& focusedAircraft() const { return radar_.focus(); }
 
  private:
-  enum class Overlay : uint8_t { None, Details, Settings, PhoneQr, ConfirmWifi };
+  enum class View : uint8_t { Radar, Detail, Alignment, PhoneLink };
 
-  static void onRadarEvent(lv_event_t* e);
-  static void onRangeButton(lv_event_t* e);
-  static void onOverlayTap(lv_event_t* e);
-  static void onSettingsButton(lv_event_t* e);
-  static void onBrightness(lv_event_t* e);
-  static void onSetupButton(lv_event_t* e);
-
-  void buildRadarScreen();
-  void buildDetails();
-  void buildSettings();
-  void buildPhoneQr();
-  void buildConfirm();
-  void buildSetup();
-  void showOverlay(Overlay o);
-  void updateHeader();
-  void updateDetails();
-  void updateSettingsLabels();
-  void updateSetup();
-  void setQr(lv_obj_t* qr, std::string& cache, const std::string& data);
+  void build();
+  Screen* route(const Model& m);
+  void pollTouch(uint32_t now);
+  void showHold(float progress);
+  void hideHold();
 
   Actions* actions_ = nullptr;
   Model m_;
   bool haveModel_ = false;
-  Phase shownPhase_ = Phase::Boot;
-  Overlay overlay_ = Overlay::None;
+  bool night_ = false;
+  View view_ = View::Radar;
+  Screen* active_ = nullptr;
+  lv_obj_t* stage_ = nullptr;
   int shiftX_ = 0, shiftY_ = 0;
-  int16_t lastAlignedBearing_ = 0;
-  uint32_t lastDetailsMs_ = 0;
-  uint32_t lastHeaderMs_ = 0;
 
-  lv_obj_t* scr_ = nullptr;
-  RadarView radar_;
+  SplashScreen splash_;
+  SetupQrScreen setupQr_;
+  SetupQrScreen link_;
+  ConnectingScreen connecting_;
+  ResultScreen result_;
+  RadarScreen radar_;
+  DetailScreen detail_;
+  AlertScreen alert_;
+  IdleScreen idle_;
+  AlignmentScreen alignment_;
 
-  // Radar overlay
-  lv_obj_t* hud_ = nullptr;
-  lv_obj_t* clock_ = nullptr;
-  lv_obj_t* info_ = nullptr;
-  lv_obj_t* status_ = nullptr;
-  lv_obj_t* rangeLabel_ = nullptr;
-  lv_obj_t* minusBtn_ = nullptr;
-  lv_obj_t* plusBtn_ = nullptr;
+  // Touch gesture state
+  bool down_ = false;
+  bool holdFired_ = false;
+  bool moved_ = false;
+  lv_point_t start_{}, last_{};
+  uint32_t downMs_ = 0;
 
-  // Details card
-  lv_obj_t* details_ = nullptr;
-  lv_obj_t* dTitle_ = nullptr;
-  lv_obj_t* dOperator_ = nullptr;
-  lv_obj_t* dType_ = nullptr;
-  lv_obj_t* dLook_ = nullptr;
-  lv_obj_t* dKeys_ = nullptr;
-  lv_obj_t* dValues_ = nullptr;
-
-  // Settings
-  lv_obj_t* settings_ = nullptr;
-  lv_obj_t* slider_ = nullptr;
-  lv_obj_t* viewBtnLabel_ = nullptr;
-  lv_obj_t* rotateBtnLabel_ = nullptr;
-  lv_obj_t* settingsInfo_ = nullptr;
-  lv_obj_t* phoneQrPanel_ = nullptr;
-  lv_obj_t* phoneQr_ = nullptr;
-  lv_obj_t* phoneQrText_ = nullptr;
-  std::string phoneQrData_;
-  lv_obj_t* confirm_ = nullptr;
-
-  // Setup / status screens
-  lv_obj_t* setup_ = nullptr;
-  lv_obj_t* sTitle_ = nullptr;
-  lv_obj_t* sStep_ = nullptr;
-  lv_obj_t* sError_ = nullptr;
-  lv_obj_t* sQr_ = nullptr;
-  lv_obj_t* sText_ = nullptr;
-  lv_obj_t* sSpinner_ = nullptr;
-  lv_obj_t* sIcon_ = nullptr;
-  lv_obj_t* sButton_ = nullptr;
-  lv_obj_t* sButtonLabel_ = nullptr;
-  std::string sQrData_;
+  lv_obj_t* hold_ = nullptr;
+  Sketch holdArt_;
+  Text holdTitle_, holdSub_, holdHint_;
+  float holdProgress_ = -1;
 };
 
 // "WIFI:T:WPA;S:<ssid>;P:<pass>;;" with the escaping phone cameras expect.

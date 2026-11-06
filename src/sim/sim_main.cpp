@@ -1,6 +1,8 @@
 // Host-side simulator: runs the real UI (src/ui) against LVGL on a PC with a
-// virtual clock and canned aircraft, and writes PNG screenshots of every
-// screen to sim_out/. Build and run with:  pio run -e simulator -t exec
+// virtual clock and the example traffic from docs/design, writes PNG
+// screenshots of every screen to sim_out/ and checks the touch interactions
+// through the same gesture code the device uses. Build and run with:
+//   pio run -e simulator && .pio/build/simulator/program
 //
 // The display path matches the device: 466x32 partial buffers, the same
 // rounder, RGB565 with byte swap.
@@ -21,6 +23,7 @@
 #include "config.h"
 #include "geo.h"
 #include "tracker.h"
+#include "traffic.h"
 #include "ui/theme.h"
 #include "ui/ui.h"
 
@@ -144,21 +147,18 @@ void writePng(const std::string& path) {
   std::printf("  wrote %s\n", path.c_str());
 }
 
-// ---- canned traffic ----
-radar::Aircraft makeAc(const char* hex, const char* cs, const char* reg, const char* type,
-                       const char* desc, const char* owner, double brgFromKoa, double distNm,
-                       int alt, float gs, float trk, int vr) {
+// ---- example traffic (docs/design/manifest.json) ----
+radar::Aircraft makeAc(const char* hex, const char* cs, const char* reg, const char* type, const char* desc,
+                       const char* squawk, double lat, double lon, int alt, float gs, float trk, int vr) {
   radar::Aircraft a;
   std::snprintf(a.hex, sizeof(a.hex), "%s", hex);
   std::snprintf(a.callsign, sizeof(a.callsign), "%s", cs);
   std::snprintf(a.reg, sizeof(a.reg), "%s", reg);
   std::snprintf(a.type, sizeof(a.type), "%s", type);
   std::snprintf(a.desc, sizeof(a.desc), "%s", desc);
-  std::snprintf(a.owner, sizeof(a.owner), "%s", owner);
-  std::snprintf(a.squawk, sizeof(a.squawk), "%s", "1200");
-  const radar::LatLon p = radar::destination({RADAR_CENTER_LAT, RADAR_CENTER_LON}, brgFromKoa, distNm);
-  a.lat = p.lat;
-  a.lon = p.lon;
+  std::snprintf(a.squawk, sizeof(a.squawk), "%s", squawk);
+  a.lat = lat;
+  a.lon = lon;
   a.altFt = alt;
   a.hasAlt = true;
   a.onGround = alt <= 0;
@@ -171,36 +171,24 @@ radar::Aircraft makeAc(const char* hex, const char* cs, const char* reg, const c
   return a;
 }
 
-std::vector<radar::Aircraft> cannedTraffic() {
+std::vector<radar::Aircraft> designTraffic() {
   return {
-      makeAc("a8c1f2", "HAL112", "N480HA", "A21N", "AIRBUS A-321neo", "HAWAIIAN AIRLINES INC", 335, 11, 4500, 205, 152, -900),
-      makeAc("a1b2c3", "ASA843", "N527AS", "B739", "BOEING 737-900", "ALASKA AIRLINES INC", 62, 17, 11800, 290, 244, -1400),
-      makeAc("ab7f10", "N8017Y", "N8017Y", "C172", "CESSNA 172 SKYHAWK", "PARADISE FLYING CLUB", 118, 4.2, 2500, 96, 301, 0),
-      makeAc("a2c4e6", "UAL1172", "N37298", "B38M", "BOEING 737 MAX 8", "UNITED AIRLINES INC", 285, 21, 23800, 410, 62, 2100),
-      makeAc("a9e3d1", "SWA2341", "N8710M", "B38M", "BOEING 737 MAX 8", "SOUTHWEST AIRLINES CO", 196, 8.5, 6900, 240, 12, -700),
-      makeAc("a3f0aa", "BLH12", "N212BH", "AS50", "", "BLUE HAWAIIAN HELICOPTERS", 28, 2.6, 1100, 102, 95, 0),
-      makeAc("a40b6e", "HAL41", "N492HA", "A332", "AIRBUS A-330-200", "HAWAIIAN AIRLINES INC", 0, 0.4, 0, 0, 170, 0),
-      makeAc("a77c01", "N44KR", "N44KR", "PC12", "PILATUS PC-12", "KAMAKA AIR", 160, 14, 9500, 250, 330, 500),
+      makeAc("a1d208", "HAL208", "N475HA", "B712", "BOEING 717-200", "3142", 19.840, -156.036, 1900, 132, 185, -600),
+      makeAc("a8a250", "SWA250", "N8810L", "B38M", "BOEING 737 MAX 8", "4271", 19.786, -156.043, 2300, 155, 5, 1400),
+      makeAc("a5a875", "ASA875", "N563AS", "B738", "BOEING 737-800", "2143", 19.700, -156.125, 4400, 210, 55, -700),
+      makeAc("a1d123", "HAL123", "N481HA", "B712", "BOEING 717-200", "3254", 19.670, -156.052, 3600, 178, 5, -500),
+      makeAc("a6c507", "MHO507", "N507MH", "C208", "CESSNA 208 CARAVAN", "1200", 19.759, -155.951, 2800, 110, 210, 0),
+      makeAc("a0b123", "N123BH", "N123BH", "EC30", "", "1200", 19.707, -156.025, 900, 85, 340, 0),
   };
 }
 
-void seedTracker(radar::Tracker& tracker) {
-  std::vector<radar::Aircraft> base = cannedTraffic();
-  std::ifstream f("test/fixtures/adsbfi_v3_koa_150nm.json");
-  std::stringstream ss;
-  ss << f.rdbuf();
-  const std::string json = ss.str();
-  std::vector<radar::Aircraft> fixture;
-  const radar::ParseResult r = radar::parseAdsbJson(json.data(), json.size(), fixture);
-  std::printf("fixture: ok=%d listed=%zu accepted=%zu\n", r.ok, r.listed, r.accepted);
-  for (radar::Aircraft& a : fixture) {
-    a.seenPosS = 0;
-    base.push_back(a);
-  }
-  // Three reports 10 s apart so the tracks have history trails.
-  for (int k = 2; k >= 0; --k) {
+// Reports 10 s apart so the tracks have a minute of history, as on the device.
+void seed(radar::Tracker& tracker, std::vector<radar::Aircraft> base, int reports = 7) {
+  tracker.clear();
+  for (int k = reports - 1; k >= 0; --k) {
     std::vector<radar::Aircraft> rep = base;
     for (radar::Aircraft& a : rep) {
+      a.seenPosS = 0;
       if (!a.hasGs || !a.hasTrack || a.onGround) continue;
       const radar::LatLon p = radar::destination({a.lat, a.lon}, a.trackDeg + 180.0, a.gsKt * 10.0 * k / 3600.0);
       a.lat = p.lat;
@@ -210,15 +198,47 @@ void seedTracker(radar::Tracker& tracker) {
   }
 }
 
+std::vector<radar::Aircraft> fixtureTraffic() {
+  std::ifstream f("test/fixtures/adsbfi_v3_koa_150nm.json");
+  std::stringstream ss;
+  ss << f.rdbuf();
+  const std::string json = ss.str();
+  std::vector<radar::Aircraft> list;
+  const radar::ParseResult r = radar::parseAdsbJson(json.data(), json.size(), list);
+  std::printf("fixture: ok=%d listed=%zu accepted=%zu\n", r.ok, r.listed, r.accepted);
+  return list;
+}
+
 // ---- app stand-in ----
 struct SimApp : ui::Actions {
   ui::Model model;
+  radar::Tracker tracker;
+  std::vector<radar::Target> targets;
+  int wifiResets = 0, retries = 0, opened = 0;
+  std::string dismissed;
   void setRange(uint16_t nm) override { model.settings.rangeNm = nm; }
-  void setBrightness(uint8_t p) override { model.settings.brightness = p; }
-  void rotateScreen() override { model.settings.screenRotation = (model.settings.screenRotation + 1) & 3; }
-  void setViewBearing(int16_t deg) override { model.settings.viewBearingDeg = deg; }
-  void startWifiSetup() override { model.phase = ui::Phase::SetupJoin; }
-  void cancelWifiSetup() override { model.phase = ui::Phase::Running; }
+  void setNorthUp(bool on) override { model.settings.northUp = on; }
+  void toggleNight() override { model.night = !model.night; }
+  void goIdle() override { model.idle = true; }
+  void wake() override { model.idle = false; }
+  void openRadar() override {
+    ++opened;
+    model.phase = ui::Phase::Running;
+  }
+  void retrySetup() override {
+    ++retries;
+    model.phase = ui::Phase::SetupJoin;
+  }
+  void resetWifi() override { ++wifiResets; }
+  void dismissAlert(const char* hex) override {
+    dismissed = hex;
+    model.alertHex.clear();
+  }
+  void analyze() {
+    radar::analyzeTraffic(tracker, model.settings, g_now, targets, model.summary);
+    model.targets = &targets;
+    model.tracker = &tracker;
+  }
 };
 
 SimApp g_app;
@@ -228,18 +248,55 @@ void run(uint32_t ms) {
   const uint32_t end = g_now + ms;
   while (g_now < end) {
     g_app.model.nowMs = g_now;
+    if (g_now % 200 == 0) g_app.analyze();
     g_ui.update(g_app.model);
     lv_timer_handler();
     g_now += 20;
   }
 }
 
-void tap(lv_coord_t x, lv_coord_t y, uint32_t holdMs = 80) {
+void press(lv_coord_t x, lv_coord_t y, uint32_t ms) {
   g_touch = {x, y};
   g_pressed = true;
-  run(holdMs);
+  run(ms);
+}
+
+void release() {
   g_pressed = false;
-  run(100);
+  run(120);
+}
+
+void tap(lv_coord_t x, lv_coord_t y) {
+  press(x, y, 80);
+  release();
+  run(300);
+}
+
+void swipe(lv_coord_t x0, lv_coord_t y0, lv_coord_t x1, lv_coord_t y1) {
+  g_touch = {x0, y0};
+  g_pressed = true;
+  run(60);
+  for (int i = 1; i <= 5; ++i) {
+    g_touch = {static_cast<lv_coord_t>(x0 + (x1 - x0) * i / 5), static_cast<lv_coord_t>(y0 + (y1 - y0) * i / 5)};
+    run(40);
+  }
+  release();
+  run(300);
+}
+
+// Where the radar draws an aircraft (same projection as the view).
+lv_point_t blipAt(const char* hex) {
+  const radar::Track* t = g_app.tracker.find(hex);
+  radar::ScopeProjection p;
+  p.center = g_app.model.settings.observer();
+  p.rangeNm = g_app.model.settings.rangeNm;
+  p.upBearingDeg = g_app.model.settings.effectiveUpBearing();
+  p.radiusPx = ui::RadarView::kRadius;
+  p.cx = ui::RadarView::kCx;
+  p.cy = ui::RadarView::kCy;
+  float x = 0, y = 0;
+  if (t) p.project(radar::Tracker::predict(*t, g_now), x, y);
+  return {static_cast<lv_coord_t>(std::lround(x)), static_cast<lv_coord_t>(std::lround(y))};
 }
 
 int failures = 0;
@@ -247,6 +304,8 @@ void expect(bool cond, const char* what) {
   std::printf("  [%s] %s\n", cond ? " ok " : "FAIL", what);
   if (!cond) ++failures;
 }
+
+void shot(const char* name) { writePng(std::string("sim_out/") + name + ".png"); }
 
 }  // namespace
 
@@ -267,21 +326,24 @@ int main() {
   lv_indev_drv_init(&g_indevDrv);
   g_indevDrv.type = LV_INDEV_TYPE_POINTER;
   g_indevDrv.read_cb = touchCb;
-  g_indevDrv.long_press_time = 1200;
   lv_indev_drv_register(&g_indevDrv);
 
-  radar::Tracker tracker;
   ui::Model& m = g_app.model;
   m.settings = radar::Settings::defaults();
-  m.tracker = &tracker;
-  m.apSsid = "KonaRadar-1A2B";
-  m.apPassword = "kona4821";
-  m.portalUrl = "http://192.168.4.1/";
-  m.wifiSsid = "Ohana-Home";
+  // A made-up observer (not anyone's real location) 4 NM east-southeast of
+  // KOA, facing 281 degrees true like the design.
+  const radar::LatLon observer = radar::destination(m.settings.center(), 115, 4.0);
+  m.settings.observerLat = observer.lat;
+  m.settings.observerLon = observer.lon;
+  m.settings.viewBearingDeg = 281;
+  m.apSsid = "Kona-Radar-7A2C";
+  m.apPassword = "look-up-7412";
+  m.portalIp = "192.168.4.1";
+  m.wifiSsid = "Balcony Wi-Fi";
   m.lanIp = "192.168.1.42";
   m.lanHost = std::string(RADAR_HOSTNAME) + ".local";
-  m.clock = "14:32";
   m.feedSource = "adsb.fi";
+  m.exampleData = true;
 
   if (!g_ui.begin(&g_app)) {
     std::printf("ui begin failed\n");
@@ -290,124 +352,175 @@ int main() {
 
   std::printf("setup screens\n");
   m.phase = ui::Phase::Boot;
-  run(300);
-  writePng("sim_out/01_boot.png");
+  run(1500);
+  shot("01_splash");
   m.phase = ui::Phase::SetupJoin;
-  m.setupCancellable = false;
   run(300);
-  writePng("sim_out/02_setup_join.png");
+  shot("02_wifi_setup_qr");
   m.phase = ui::Phase::SetupPortal;
   run(300);
-  writePng("sim_out/03_setup_portal.png");
-  m.phase = ui::Phase::SetupJoin;
-  m.setupError = "Wrong password for Ohana-Home. Try again.";
-  run(300);
-  writePng("sim_out/04_setup_wrong_password.png");
-  m.setupError.clear();
-  m.phase = ui::Phase::SetupTrying;
-  run(300);
-  writePng("sim_out/05_setup_trying.png");
+  shot("02b_wifi_setup_phone_joined");
+  m.phase = ui::Phase::SetupJoining;
+  run(600);
+  shot("03_wifi_connecting");
+  m.phase = ui::Phase::SetupOnline;
+  run(600);
+  shot("03b_wifi_checking_internet");
   m.phase = ui::Phase::SetupDone;
   run(300);
-  writePng("sim_out/06_setup_done.png");
+  shot("04_wifi_connected");
+  tap(233, 396);
+  expect(g_app.opened == 1 && m.phase == ui::Phase::Running, "OPEN RADAR opens the radar");
+  m.phase = ui::Phase::SetupFailed;
+  m.setupFailure = ui::SetupFailure::WrongPassword;
+  run(300);
+  shot("05_wifi_failed");
+  tap(233, 369);
+  expect(g_app.retries == 1 && m.phase == ui::Phase::SetupJoin, "TRY AGAIN re-opens phone setup");
+  m.phase = ui::Phase::SetupFailed;
+  m.setupFailure = ui::SetupFailure::NoInternet;
+  run(300);
+  shot("05b_wifi_no_internet");
   m.phase = ui::Phase::Offline;
   run(300);
-  writePng("sim_out/07_offline.png");
+  shot("05c_wifi_offline");
 
   std::printf("radar\n");
-  seedTracker(tracker);
+  seed(g_app.tracker, designTraffic());
   m.phase = ui::Phase::Running;
   m.online = true;
   m.feedEverOk = m.feedOk = true;
-  run(2500);
-  writePng("sim_out/10_radar_25nm_view281.png");
+  run(1500);
+  shot("06_radar_view_aligned");
+  expect(g_ui.focusedAircraft() == "a1d208", "next arrival (HAL208) is focused by default");
+  expect(m.summary.nextArrival >= 0 && g_app.targets[m.summary.nextArrival].cue.runway &&
+             std::strcmp(g_app.targets[m.summary.nextArrival].cue.runway, "17") == 0,
+         "HAL208 is a likely arrival on runway 17");
   g_flushedPixels = 0;
-  run(1000);
-  std::printf("  steady-state flushed pixels/s: %llu (%.1f full frames)\n",
-              static_cast<unsigned long long>(g_flushedPixels), g_flushedPixels / double(W * H));
+  run(2000);
+  std::printf("  steady-state flushed pixels/s: %.0f (%.2f full frames)\n", g_flushedPixels / 2.0,
+              g_flushedPixels / 2.0 / (W * H));
 
-  // Tap the HAL112 blip (find it through the view's own projection).
-  {
-    const radar::Track* t = tracker.find("a8c1f2");
-    float x, y;
-    g_ui.closeOverlays();
-    // Projection is owned by the view; replicate it from settings.
-    radar::ScopeProjection p;
-    p.center = m.settings.center();
-    p.rangeNm = m.settings.rangeNm;
-    p.upBearingDeg = m.settings.effectiveUpBearing();
-    p.radiusPx = static_cast<float>(ui::theme().scopeRadius);
-    p.project(radar::Tracker::predict(*t, g_now), x, y);
-    tap(static_cast<lv_coord_t>(x + 6), static_cast<lv_coord_t>(y - 4));
-    run(1100);
-    const char* sel = g_ui.selectedAircraft();
-    expect(sel && std::strcmp(sel, "a8c1f2") == 0, "tap on HAL112 opens its details");
-    writePng("sim_out/11_details_tap.png");
-    tap(233, 420);
-    run(200);
-  }
-
-  std::printf("range buttons\n");
-  tap(233 + 82, 466 - 46 - 21);
-  run(300);
-  expect(m.settings.rangeNm == 50, "+ button goes 25 -> 50 NM");
-  writePng("sim_out/12_radar_50nm.png");
-  tap(233 - 82, 466 - 46 - 21);
-  tap(233 - 82, 466 - 46 - 21);
-  tap(233 - 82, 466 - 46 - 21);
-  run(300);
-  expect(m.settings.rangeNm == 5, "- button x3 goes 50 -> 5 NM");
-  writePng("sim_out/13_radar_5nm.png");
-  m.settings.rangeNm = 200;
-  run(800);
-  writePng("sim_out/14_radar_200nm.png");
-  m.settings.rangeNm = 25;
-  m.settings.viewBearingDeg = 0;
-  run(800);
-  writePng("sim_out/15_radar_25nm_north_up.png");
-  m.settings.viewBearingDeg = RADAR_VIEW_BEARING_DEG;
-  g_ui.setPixelShift(RADAR_PIXEL_SHIFT_MAX, -RADAR_PIXEL_SHIFT_MAX);
-  run(800);
-  writePng("sim_out/16_radar_pixel_shifted.png");
-  g_ui.setPixelShift(0, 0);
-  run(300);
-
-  std::printf("long press -> settings\n");
-  tap(233, 300, 1500);
-  run(300);
-  writePng("sim_out/20_settings.png");
-  tap(233, 142 + 21);  // view toggle
-  run(200);
-  expect(m.settings.viewBearingDeg == 0, "view toggle -> north up");
-  tap(233, 142 + 21);
-  run(200);
-  expect(m.settings.viewBearingDeg == RADAR_VIEW_BEARING_DEG, "view toggle -> back to 281");
-  tap(233, 242 + 21);  // phone settings
-  run(300);
-  writePng("sim_out/21_phone_settings_qr.png");
-  tap(233, 233);
-  run(100);
-  g_ui.openSettings();
-  run(100);
-  tap(233, 292 + 21);  // change Wi-Fi
-  run(300);
-  writePng("sim_out/22_confirm_wifi.png");
-  tap(233 + 78, 290 + 23);  // cancel
-  run(200);
-  expect(m.phase == ui::Phase::Running, "cancel keeps radar running");
-  tap(233, 350 + 21);  // close
-  run(200);
-
-  std::printf("details for every visible aircraft type\n");
-  g_ui.openDetails("a2c4e6");
-  run(1200);
-  writePng("sim_out/23_details_ual.png");
-  g_ui.closeOverlays();
-
-  m.feedOk = false;
-  m.feedAgeS = 140;
+  tap(290, 80);
+  expect(m.settings.rangeNm == 20, "tapping the range text goes 10 -> 20 NM");
+  tap(290, 80);
+  expect(m.settings.rangeNm == 5, "and wraps 20 -> 5 NM");
   run(400);
-  writePng("sim_out/24_radar_stale_feed.png");
+  {
+    const lv_point_t p = blipAt("a6c507");
+    tap(p.x, p.y);
+    expect(g_ui.focusedAircraft() == "a6c507", "tapping MHO507 selects it");
+  }
+  run(1200);
+  shot("07_radar_zoom_5nm");
+  {
+    const lv_point_t p = blipAt("a6c507");
+    tap(p.x, p.y);
+  }
+  run(300);
+  shot("08c_detail_traffic");
+  tap(108, 79);
+  m.settings.rangeNm = 10;
+  run(400);
+  {
+    const lv_point_t p = blipAt("a8a250");
+    tap(p.x, p.y);
+    expect(g_ui.focusedAircraft() == "a8a250", "tapping SWA250 selects it");
+    run(600);
+    shot("07b_radar_departure_selected");
+    tap(233, 373);
+    run(300);
+    shot("08b_detail_departure");
+  }
+  tap(108, 79);
+  m.settings.rangeNm = 5;
+  run(300);
+  swipe(150, 250, 330, 250);
+  expect(m.settings.rangeNm == 5, "swipe right at 5 NM stays at 5 NM");
+  swipe(330, 250, 150, 250);
+  expect(m.settings.rangeNm == 10, "swipe left zooms out to 10 NM");
+  tap(233, 252);
+  expect(g_ui.focusedAircraft() == "a1d208", "tapping empty sky returns focus to the next arrival");
+  tap(233, 373);
+  run(300);
+  shot("08_aircraft_detail");
+  swipe(150, 250, 330, 250);
+  run(300);
+
+  std::printf("alert\n");
+  m.alertHex = "a1d208";
+  run(600);
+  shot("09_look_up_alert");
+  tap(233, 233);
+  run(300);
+  expect(g_app.dismissed == "a1d208" && m.alertHex.empty(), "tap dismisses the alert");
+  shot("09b_alert_opens_detail");
+  tap(108, 79);
+
+  std::printf("night\n");
+  swipe(233, 300, 233, 150);
+  run(800);
+  expect(m.night, "swipe up switches to night");
+  shot("10_night_mode");
+  swipe(233, 300, 233, 150);
+  run(300);
+  expect(!m.night, "and back to day");
+
+  std::printf("idle\n");
+  swipe(233, 150, 233, 300);
+  run(500);
+  expect(m.idle, "swipe down dims to idle");
+  shot("11_idle_dim");
+  tap(233, 233);
+  expect(!m.idle, "tap wakes");
+
+  std::printf("alignment\n");
+  tap(190, 60);
+  run(300);
+  shot("12_balcony_alignment");
+  tap(150, 387);
+  expect(m.settings.northUp, "NORTH UP segment");
+  run(300);
+  shot("12b_alignment_north_up");
+  tap(300, 387);
+  expect(!m.settings.northUp, "VIEW UP segment");
+  tap(233, 432);
+  run(300);
+  shot("13_phone_settings_link");
+  tap(233, 233);
+  tap(108, 79);
+
+  std::printf("hold to reset Wi-Fi\n");
+  press(200, 200, 2500);
+  shot("14_hold_to_reset_wifi");
+  release();
+  expect(g_app.wifiResets == 0, "releasing early cancels the reset");
+  press(200, 200, 5200);
+  release();
+  expect(g_app.wifiResets == 1, "holding 5 s resets Wi-Fi");
+  expect(m.settings.rangeNm == 10 && m.settings.viewBearingDeg == 281, "other settings untouched by the hold");
+
+  std::printf("north-up, unset observer, live fixture traffic\n");
+  {
+    radar::Settings s = radar::Settings::defaults();
+    s.rangeNm = 20;
+    m.settings = s;
+    std::vector<radar::Aircraft> live = fixtureTraffic();
+    std::vector<radar::Aircraft> d = designTraffic();
+    live.insert(live.end(), d.begin(), d.end());
+    seed(g_app.tracker, live);
+    m.exampleData = false;
+    run(1500);
+    shot("15_radar_20nm_observer_not_set");
+    m.feedAgeS = 45;
+    run(400);
+    shot("16_radar_stale_feed");
+    m.feedAgeS = 0;
+    g_ui.setPixelShift(RADAR_PIXEL_SHIFT_MAX, -RADAR_PIXEL_SHIFT_MAX);
+    run(600);
+    shot("17_radar_pixel_shifted");
+    g_ui.setPixelShift(0, 0);
+  }
 
   std::printf("%s (%d failures)\n", failures ? "FAILED" : "done", failures);
   return failures ? 1 : 0;

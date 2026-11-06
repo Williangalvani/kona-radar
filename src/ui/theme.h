@@ -1,75 +1,99 @@
-// Visual theme: every color, font and size the UI uses lives here so the
-// look can be restyled without touching layout or logic.
+// Visual theme from docs/design/DESIGN.md: palettes, fonts and the helpers
+// that place text the way the design renders it. Restyle here; screen
+// layouts live in the screen files.
 #pragma once
 
 #include <lvgl.h>
 #include <stdint.h>
 
+#include "fonts/fonts.h"
+
 namespace ui {
 
-// Colors are 0xRRGGBB.
-struct Theme {
-  // Scope background layer (pre-rendered per pixel)
-  uint32_t scopeCenter = 0x02140A;  // face color at the center
-  uint32_t scopeEdge = 0x010A05;    // face color at the outer ring
-  uint32_t land = 0x0B2A16;
-  uint32_t coast = 0x2C7A47;
-  uint32_t ring = 0x1C5C33;
-  uint32_t ringOuter = 0x35A060;
-  uint32_t tick = 0x2E8A52;
-  float coastWidth = 1.3f;
-  float ringWidth = 1.1f;
-  float outerRingWidth = 2.2f;
+// Colors are 0xRRGGBB. Each role has a day and a night (warm, low
+// luminance) value; see Palette::forDay() / Palette::forNight().
+struct Palette {
+  bool night;
+  uint32_t text;        // primary text, big numbers
+  uint32_t title;       // screen titles
+  uint32_t muted;       // secondary text
+  uint32_t quiet;       // tertiary text, footers
+  uint32_t accent;      // cyan: mode line, active step, view marker
+  uint32_t accentDim;   // trails, outer selection ring
+  uint32_t amber;       // arrivals, focus, alerts
+  uint32_t sage;        // departures, success
+  uint32_t coral;       // failure
+  uint32_t grid;        // rings, ticks, dividers
+  uint32_t coast;
+  uint32_t panel;       // dock / tag / button fill
+  uint32_t panelLine;   // their outline
+  uint32_t cone;        // observer view cone
+  uint32_t runway;
+  uint32_t arrivalLine; // dashed line from an arrival to its threshold
+  uint32_t plane;
+  uint32_t planeDeparture;
+  uint32_t planeFocus;
+  uint32_t observer;
+  uint32_t mutedTarget; // stale targets
+  uint32_t northLabel;
 
-  // Sweep
-  uint32_t sweepTrail = 0x26FF73;  // additive glow color (scaled by intensity)
-  float sweepTrailMax = 0.42f;     // peak intensity right behind the beam
-  float sweepTrailDeg = 90.0f;
-  uint32_t sweepBeam = 0x7DFFAA;
-
-  // Scope annotations drawn by LVGL
-  uint32_t cardinal = 0x5CD68A;
-  uint32_t ringLabel = 0x3A8F5C;
-  uint32_t airport = 0x4C9A6A;
-  uint32_t observer = 0x9FE8FF;
-  uint32_t centerMark = 0x7DFFAA;
-
-  // Aircraft
-  uint32_t blip = 0x8CFFB4;
-  uint32_t blipDim = 0x2C8A50;
-  uint32_t blipGround = 0x4F7A60;
-  uint32_t label = 0xB8FFD2;
-  uint32_t labelDim = 0x6FB98C;
-  uint32_t selected = 0xFFC233;
-  uint32_t emergency = 0xFF4D4D;
-  uint32_t trail = 0x5CD68A;
-
-  // Overlay widgets
-  uint32_t text = 0xD8FFE6;
-  uint32_t textDim = 0x7FB394;
-  uint32_t accent = 0x3DFF8B;
-  uint32_t warn = 0xFFB020;
-  uint32_t error = 0xFF5A5A;
-  uint32_t panelBg = 0x000000;
-  uint8_t panelOpa = 232;
-  uint32_t buttonBg = 0x0A2A17;
-  uint32_t buttonBorder = 0x2E8A52;
-
-  const lv_font_t* fontLabel = &lv_font_montserrat_14;    // aircraft data blocks
-  const lv_font_t* fontSmall = &lv_font_montserrat_14;
-  const lv_font_t* fontBody = &lv_font_montserrat_16;
-  const lv_font_t* fontLarge = &lv_font_montserrat_20;
-  const lv_font_t* fontTitle = &lv_font_montserrat_24;
-  const lv_font_t* fontHuge = &lv_font_montserrat_32;
-
-  // Geometry
-  int scopeRadius = 224;  // px, outer ring; leaves room for pixel shift
-  int blipRadius = 4;
-  int hitRadius = 34;     // tap tolerance around a blip
+  static const Palette& forDay();
+  static const Palette& forNight();
 };
 
-const Theme& theme();
+// Dim idle screen colors (shared by day and night).
+struct IdleColors {
+  static constexpr uint32_t title = 0x354044;
+  static constexpr uint32_t count = 0x465354;
+  static constexpr uint32_t text = 0x3C484A;
+  static constexpr uint32_t dot = 0x634D32;
+  static constexpr uint32_t arrival = 0x5E5140;
+  static constexpr uint32_t rule = 0x202D30;
+  static constexpr uint32_t footer = 0x2C3638;
+};
+
+const Palette& palette();
+void setNightPalette(bool night);
 
 inline lv_color_t col(uint32_t rgb) { return lv_color_hex(rgb); }
+
+// Fonts by design role (IBM Plex; "semi" = the design's "bold").
+namespace font {
+inline const lv_font_t* mono(int px) {
+  switch (px) {
+    case 10: return &plex_mono_10;
+    case 11: return &plex_mono_11;
+    case 12: return &plex_mono_12;
+    case 13: return &plex_mono_13;
+    case 14: return &plex_mono_14;
+    default: return &plex_mono_16;
+  }
+}
+inline const lv_font_t* medium(int px) {
+  return px <= 16 ? &plex_med_16 : px <= 18 ? &plex_med_18 : &plex_med_20;
+}
+inline const lv_font_t* regular18() { return &plex_reg_18; }
+inline const lv_font_t* bold(int px) {
+  switch (px) {
+    case 14: return &plex_semi_14;
+    case 16: return &plex_semi_16;
+    case 18: return &plex_semi_18;
+    case 20: return &plex_semi_20;
+    case 26: return &plex_semi_26;
+    case 29: return &plex_semi_29;
+    case 32: return &plex_semi_32;
+    case 36: return &plex_semi_36;
+    case 46: return &plex_semi_46;
+    case 53: return &plex_semi_53;
+    case 66: return &plex_semi_66;
+    default: return &plex_semi_20;
+  }
+}
+}  // namespace font
+
+// The design's text y coordinates are the top of the capital letters; LVGL
+// positions the top of its line box. This is the difference in pixels to add
+// to a design y coordinate.
+int designTopOffset(const lv_font_t* f);
 
 }  // namespace ui
