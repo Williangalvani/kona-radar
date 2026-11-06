@@ -121,8 +121,8 @@ button.main{background:#3dff8b;color:#00210d;border:0;font-weight:600;width:100%
  <div id="bearingBox"><label for="viewBearingDeg">Bearing at the top (degrees, 0-359)</label>
  <input id="viewBearingDeg" type="number" min="0" max="359"><div class="hint" id="bhint"></div></div>
  <label for="screenRotation">Screen mounting</label>
- <select id="screenRotation"><option value="0">USB port down (normal)</option><option value="1">rotated 90&deg;</option>
- <option value="2">upside down</option><option value="3">rotated 270&deg;</option></select>
+ <select id="screenRotation"><option value="0">normal</option><option value="1">rotated 90&deg; clockwise</option>
+ <option value="2">upside down</option><option value="3">rotated 270&deg; clockwise</option></select>
 </div>
 <h2>Screen</h2><div class="card">
  <label for="brightness">Brightness (%)</label><input id="brightness" type="number" min="5" max="100">
