@@ -4,10 +4,16 @@
 // through the same gesture code the device uses. Build and run with:
 //   pio run -e simulator && .pio/build/simulator/program
 //
+// Environment: SIM_OUT=<dir> writes there instead of sim_out/, SIM_RAW=1 keeps
+// the corners outside the round panel as rendered (no gray), SIM_EXTRA=1 adds
+// the extra states tools/sim_check.py inspects (animation frames, every idle
+// spot, night variants, bezel shifts).
+//
 // The display path matches the device: 466x32 partial buffers, the same
 // rounder, RGB565 with byte swap.
 #include <lvgl.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -42,6 +48,8 @@ lv_indev_drv_t g_indevDrv;
 bool g_pressed = false;
 lv_point_t g_touch{0, 0};
 uint64_t g_flushedPixels = 0;
+std::string g_outDir = "sim_out";
+bool g_rawCorners = false;
 
 void flushCb(lv_disp_drv_t* drv, const lv_area_t* a, lv_color_t* px) {
   const int w = a->x2 - a->x1 + 1;
@@ -110,7 +118,7 @@ void writePng(const std::string& path) {
       uint8_t b = static_cast<uint8_t>((v & 31) * 255 / 31);
       // Show the parts the round panel cannot display as dark gray.
       const float dx = x + 0.5f - W / 2.0f, dy = y + 0.5f - H / 2.0f;
-      if (dx * dx + dy * dy > (W / 2.0f) * (W / 2.0f)) r = g = b = 40;
+      if (!g_rawCorners && dx * dx + dy * dy > (W / 2.0f) * (W / 2.0f)) r = g = b = 40;
       raw.push_back(r);
       raw.push_back(g);
       raw.push_back(b);
@@ -183,8 +191,8 @@ std::vector<radar::Aircraft> designTraffic() {
 }
 
 // Reports 10 s apart so the tracks have a minute of history, as on the device.
-void seed(radar::Tracker& tracker, std::vector<radar::Aircraft> base, int reports = 7) {
-  tracker.clear();
+void seed(radar::Tracker& tracker, std::vector<radar::Aircraft> base, int reports = 7, bool clear = true) {
+  if (clear) tracker.clear();
   for (int k = reports - 1; k >= 0; --k) {
     std::vector<radar::Aircraft> rep = base;
     for (radar::Aircraft& a : rep) {
@@ -305,7 +313,248 @@ void expect(bool cond, const char* what) {
   if (!cond) ++failures;
 }
 
-void shot(const char* name) { writePng(std::string("sim_out/") + name + ".png"); }
+// ---- text audit: the design's safe area and no overlapping or spilling text ----
+int auditWarnings = 0;
+
+bool visible(lv_obj_t* o) {
+  for (; o; o = lv_obj_get_parent(o))
+    if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return false;
+  return true;
+}
+
+void collect(lv_obj_t* o, std::vector<lv_obj_t*>& labels, std::vector<lv_obj_t*>& panels) {
+  if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return;
+  if (lv_obj_check_type(o, &lv_label_class)) {
+    const char* t = lv_label_get_text(o);
+    if (t && t[0]) labels.push_back(o);
+  } else if (lv_obj_get_width(o) < W && lv_obj_get_style_bg_opa(o, 0) > 0) {
+    panels.push_back(o);
+  }
+  for (uint32_t i = 0; i < lv_obj_get_child_cnt(o); ++i) collect(lv_obj_get_child(o, i), labels, panels);
+}
+
+// Ink box of a label: its text width, from the cap top to the baseline.
+lv_area_t inkBox(lv_obj_t* o) {
+  const lv_font_t* f = lv_obj_get_style_text_font(o, 0);
+  const char* t = lv_label_get_text(o);
+  const int w = lv_txt_get_width(t, static_cast<uint32_t>(std::strlen(t)), f,
+                                 lv_obj_get_style_text_letter_space(o, 0), LV_TEXT_FLAG_NONE);
+  const int top = o->coords.y1 - ui::designTopOffset(f);
+  const int base = o->coords.y1 + f->line_height - f->base_line;
+  return {o->coords.x1, static_cast<lv_coord_t>(top), static_cast<lv_coord_t>(o->coords.x1 + w - 1),
+          static_cast<lv_coord_t>(base - 1)};
+}
+
+void warn(const char* shotName, const std::string& what) {
+  std::printf("  [warn] %s: %s\n", shotName, what.c_str());
+  ++auditWarnings;
+}
+
+void audit(const char* shotName) {
+  std::vector<lv_obj_t*> labels, panels;
+  // The hold overlay covers the screen; audit it on its own when it is up.
+  collect(lv_layer_top(), labels, panels);
+  if (labels.empty()) collect(lv_scr_act(), labels, panels);
+  // DESIGN.md: text-box corners within radius 228, 2 px of it kept for the
+  // burn-in shift, so 226 when the stage is not shifted.
+  lv_obj_t* stage = lv_obj_get_child(lv_scr_act(), 0);
+  const int shift = stage ? std::max(std::abs(lv_obj_get_x(stage)), std::abs(lv_obj_get_y(stage))) : 0;
+  const float limit = 226.0f + std::min(shift, 2);
+  std::vector<lv_area_t> boxes;
+  for (lv_obj_t* l : labels) {
+    const lv_area_t b = inkBox(l);
+    boxes.push_back(b);
+    float worst = 0;
+    for (int k = 0; k < 4; ++k) {
+      const float px = (k & 1 ? b.x2 + 1 : b.x1) - W / 2.0f, py = (k & 2 ? b.y2 + 1 : b.y1) - H / 2.0f;
+      worst = std::max(worst, std::sqrt(px * px + py * py));
+    }
+    if (worst > limit) {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf), "\"%s\" corner at r=%.1f (limit %.0f)", lv_label_get_text(l), worst, limit);
+      warn(shotName, buf);
+    }
+    for (lv_obj_t* p : panels) {
+      const lv_area_t& c = p->coords;
+      const bool touches = b.x1 <= c.x2 && c.x1 <= b.x2 && b.y1 <= c.y2 && c.y1 <= b.y2;
+      const bool inside = b.x1 >= c.x1 + 3 && b.x2 <= c.x2 - 3 && b.y1 >= c.y1 + 2 && b.y2 <= c.y2 - 2;
+      if (touches && !inside)
+        warn(shotName, std::string("\"") + lv_label_get_text(l) + "\" spills out of its panel");
+    }
+  }
+  for (size_t i = 0; i < boxes.size(); ++i)
+    for (size_t j = i + 1; j < boxes.size(); ++j) {
+      const lv_area_t &a = boxes[i], &b = boxes[j];
+      if (a.x1 <= b.x2 && b.x1 <= a.x2 && a.y1 <= b.y2 && b.y1 <= a.y2)
+        warn(shotName, std::string("\"") + lv_label_get_text(labels[i]) + "\" overlaps \"" +
+                           lv_label_get_text(labels[j]) + "\"");
+    }
+}
+
+void shot(const char* name) {
+  writePng(g_outDir + "/" + name + ".png");
+  audit(name);
+}
+
+void shotf(const char* fmt, int a, int b = 0) {
+  char n[64];
+  std::snprintf(n, sizeof(n), fmt, a, b);
+  shot(n);
+}
+
+void useDesignSettings() {
+  radar::Settings s = radar::Settings::defaults();
+  s.observerLat = 19.7470;  // the placeholder observer from docs/design
+  s.observerLon = -155.9940;
+  s.viewBearingDeg = 260;
+  g_app.model.settings = s;
+}
+
+// The worst case for text widths: wide 8-character callsign, long owner and
+// type, emergency squawk, high and close (two-digit elevation), behind the view.
+radar::Aircraft longTextAircraft() {
+  radar::Aircraft a = makeAc("a7e777", "WMW8888W", "N888WW", "BE35", "BEECHCRAFT KING AIR 350ER", "7700", 0, 0,
+                             12500, 450, 300, 2500);
+  std::snprintf(a.owner, sizeof(a.owner), "%s", "CIVIL AIR PATROL INCORPORATED");
+  a.emergency = true;
+  const radar::LatLon p = radar::destination(g_app.model.settings.observer(), 80, 2.0);
+  a.lat = p.lat;
+  a.lon = p.lon;
+  return a;
+}
+
+// States beyond the README set, for tools/sim_check.py (SIM_EXTRA=1).
+void extras() {
+  std::printf("extra states\n");
+  ui::Model& m = g_app.model;
+  useDesignSettings();
+  m.exampleData = true;
+  m.feedAgeS = 0;
+  m.alertHex.clear();
+  m.phase = ui::Phase::Running;
+  seed(g_app.tracker, designTraffic());
+  run(1500);
+
+  // Mid-animation frames: the connecting spinner a quarter turn apart, and
+  // the hold-to-reset ring a third and two thirds of the way round.
+  m.phase = ui::Phase::SetupJoining;
+  for (int i = 0; i < 4; ++i) {
+    run(380);
+    shotf("x_spinner_%d", i);
+  }
+  m.phase = ui::Phase::Running;
+  run(300);
+  press(200, 200, 1700);
+  shot("x_hold_34");
+  run(1700);
+  shot("x_hold_68");
+  release();
+  run(300);
+
+  m.settings.rangeNm = 20;
+  run(600);
+  shot("x_radar_20nm");
+  m.settings.rangeNm = 5;
+  run(600);
+  shot("x_radar_5nm");
+  m.settings.rangeNm = 10;
+  run(600);
+
+  // Burn-in shift at each diagonal extreme (bezel clearance).
+  const int s = RADAR_PIXEL_SHIFT_MAX;
+  for (int k = 0; k < 4; ++k) {
+    const int dx = k & 1 ? s : -s, dy = k & 2 ? s : -s;
+    g_ui.setPixelShift(dx, dy);
+    run(400);
+    shotf("x_radar_shift_%+d_%+d", dx, dy);
+  }
+  g_ui.setPixelShift(0, 0);
+
+  m.night = true;
+  run(600);
+  shot("x_night_radar");
+  g_ui.openDetail("a1d208");
+  run(400);
+  shot("x_night_detail");
+  g_ui.back();
+  m.alertHex = "a1d208";
+  run(600);
+  shot("x_night_alert");
+  m.alertHex.clear();
+  g_ui.openAlignment();
+  run(400);
+  shot("x_night_alignment");
+  g_ui.back();
+  // The longest footers the device can show.
+  m.exampleData = false;
+  m.online = false;
+  run(400);
+  shot("x_night_footer_wifi_lost");
+  m.online = true;
+  m.settings = radar::Settings::defaults();  // observer on the airport = not set
+  run(600);
+  shot("x_night_footer_location_not_set");
+  useDesignSettings();
+  m.exampleData = true;
+  m.night = false;
+  run(600);
+
+  // Idle: every resting spot, each with the stage shift pushing it further out.
+  static const int8_t kSpots[][2] = {{0, 0}, {9, -12}, {-9, 10}, {11, 7}, {-11, -7}, {0, 14}, {0, -14}};
+  for (int k = 0; k < 7; ++k) {
+    g_now = (g_now / 420000 + 1) * 420000 + k * 60000 + 1000;
+    seed(g_app.tracker, designTraffic());
+    m.idle = true;
+    g_ui.setPixelShift(kSpots[k][0] > 0 ? s : kSpots[k][0] < 0 ? -s : 0,
+                       kSpots[k][1] > 0 ? s : kSpots[k][1] < 0 ? -s : 0);
+    run(400);
+    shotf("x_idle_spot%d", k);
+  }
+  g_ui.setPixelShift(0, 0);
+  m.idle = false;
+  run(300);
+
+  // Emergency (coral) and stale (muted) targets.
+  std::vector<radar::Aircraft> all = designTraffic();
+  std::snprintf(all[4].squawk, sizeof(all[4].squawk), "%s", "7700");
+  all[4].emergency = true;
+  const uint32_t now = g_now;
+  g_now -= 45000;
+  seed(g_app.tracker, {all[2]});
+  g_now = now;
+  std::vector<radar::Aircraft> fresh = all;
+  fresh.erase(fresh.begin() + 2);
+  seed(g_app.tracker, fresh, 7, false);
+  run(1500);
+  shot("x_radar_emergency_stale");
+  g_ui.openDetail(all[2].hex);
+  run(400);
+  shot("x_detail_stale");
+  g_ui.back();
+
+  // Longest text in the dock, detail, footer and alert.
+  m.exampleData = false;
+  fresh.push_back(longTextAircraft());
+  seed(g_app.tracker, fresh);
+  run(600);
+  g_ui.selectAircraft("a7e777");
+  run(600);
+  shot("x_radar_long_dock");
+  g_ui.openDetail("a7e777");
+  run(400);
+  shot("x_detail_long_text");
+  g_ui.back();
+  m.alertHex = "a7e777";
+  run(600);
+  shot("x_alert_long_text");
+  m.alertHex.clear();
+  m.exampleData = true;
+  run(300);
+
+  g_app.tracker.clear();
+  run(600);
+  shot("x_radar_quiet_sky");
+}
 
 }  // namespace
 
@@ -313,7 +562,9 @@ extern "C" uint32_t app_millis(void) { return g_now; }
 
 int main() {
   initCrc();
-  if (std::system("mkdir -p sim_out") != 0) std::printf("cannot create sim_out/\n");
+  if (const char* d = std::getenv("SIM_OUT")) g_outDir = d;
+  g_rawCorners = std::getenv("SIM_RAW") != nullptr;
+  if (std::system(("mkdir -p '" + g_outDir + "'").c_str()) != 0) std::printf("cannot create %s/\n", g_outDir.c_str());
   lv_init();
   lv_disp_draw_buf_init(&g_drawBuf, g_buf1, g_buf2, W * kBufRows);
   lv_disp_drv_init(&g_dispDrv);
@@ -511,6 +762,9 @@ int main() {
     shot("17_radar_pixel_shifted");
     g_ui.setPixelShift(0, 0);
   }
+
+  if (std::getenv("SIM_EXTRA")) extras();
+  std::printf("text audit: %d warnings\n", auditWarnings);
 
   std::printf("%s (%d failures)\n", failures ? "FAILED" : "done", failures);
   return failures ? 1 : 0;

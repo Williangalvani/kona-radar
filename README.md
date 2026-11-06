@@ -472,7 +472,17 @@ through the same gesture recognizer the device uses:
 - the alignment switch;
 - a 5 s hold that resets Wi-Fi, and an early release that doesn't.
 
-Compare its output with `docs/design/screens/`.
+Compare its output with `docs/design/screens/`. Every screenshot also goes
+through a text audit: every label must stay inside the design's round safe
+area (radius 226, or 228 when shifted), must not overlap another label, and
+must not spill out of its panel.
+
+`python3 tools/sim_check.py` (needs Pillow and numpy; opencv-python-headless
+for QR decoding) runs the simulator with extra states and writes
+[`docs/sim-check/`](docs/sim-check/REPORT.md). The extra states are
+mid-animation frames, every idle spot, night variants, the longest texts and
+the burn-in shift extremes. The output has native screenshots, 4× zoomed crops
+of the risky regions, and an edge and QR report.
 
 ## What to check first on real hardware
 

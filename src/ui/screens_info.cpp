@@ -38,6 +38,32 @@ std::string lower(std::string s) {
   return s;
 }
 
+// Detail screen: the callsign must clear the back chevron (x <= 114), and the
+// operator/type line stays within the width of the stats below it.
+constexpr int kCallsignMaxWidth = 222;
+constexpr int kSubMaxWidth = 300;
+
+// Shortens `s` to fit `maxWidth` in `t`'s font: whole UTF-8 characters, no
+// dangling " · " separator, and an ellipsis.
+std::string ellipsize(const Text& t, std::string s, int maxWidth) {
+  if (t.measure(s) <= maxWidth) return s;
+  while (!s.empty()) {
+    size_t n = s.size() - 1;
+    while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
+    s.resize(n);
+    for (;;) {
+      if (!s.empty() && s.back() == ' ')
+        s.pop_back();
+      else if (s.size() >= 2 && s.compare(s.size() - 2, 2, "\xC2\xB7") == 0)
+        s.resize(s.size() - 2);
+      else
+        break;
+    }
+    if (t.measure(s + "\xE2\x80\xA6") <= maxWidth) return s + "\xE2\x80\xA6";
+  }
+  return s;
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ detail
@@ -83,14 +109,18 @@ void DetailScreen::refresh(const Model& m) {
   }
   const radar::Aircraft& a = t->track->ac;
   char buf[64], buf2[32];
+  // A wide callsign at 46 px would run into the back chevron.
+  callsign_.setFont(font::bold(46));
   callsign_.set(radar::displayName(a, buf, sizeof(buf)));
+  if (callsign_.width() > kCallsignMaxWidth) callsign_.setFont(font::bold(36));
   radar::operatorName(a, buf, sizeof(buf));
   radar::aircraftTypeName(a, buf2, sizeof(buf2));
   std::string sub = buf;
+  // Operator and type when both fit; otherwise the type alone.
+  if (buf2[0] && !sub.empty() && sub_.measure(sub + "  \xC2\xB7  " + buf2) > kSubMaxWidth) sub.clear();
   if (buf2[0]) sub += sub.empty() ? std::string(buf2) : std::string("  \xC2\xB7  ") + buf2;
   if (sub.empty()) sub = a.reg[0] ? a.reg : "Unknown aircraft";
-  if (sub.size() > 34) sub = sub.substr(0, 33) + "\xE2\x80\xA6";
-  sub_.set(sub);
+  sub_.set(ellipsize(sub_, sub, kSubMaxWidth));
 
   const radar::FlightCue& c = t->cue;
   if (a.emergency) {
@@ -152,10 +182,11 @@ void DetailScreen::refresh(const Model& m) {
   look_.set(look);
   look_.setColor(c.phase == radar::FlightPhase::Arrival ? p.amber : p.text);
 
-  std::string f = m.exampleData ? "EXAMPLE \xC2\xB7 " : "";
-  if (a.squawk[0]) f += std::string("SQUAWK ") + a.squawk + " \xC2\xB7 ";
+  std::string f = a.squawk[0] ? std::string("SQUAWK ") + a.squawk + " \xC2\xB7 " : "";
   std::snprintf(buf, sizeof(buf), "%ld\xC2\xB0 UP", std::lround(std::max(0.0, t->elevationDeg)));
-  footer_.set(f + buf);
+  f += buf;
+  if (m.exampleData && footer_.fits("EXAMPLE \xC2\xB7 " + f)) f = "EXAMPLE \xC2\xB7 " + f;
+  footer_.set(f);
 }
 
 void DetailScreen::tap(int x, int y) {

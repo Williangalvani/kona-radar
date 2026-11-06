@@ -132,7 +132,8 @@ void RadarScreen::refresh(const Model& m) {
       f = "SET YOUR LOCATION ON PHONE";
     }
   }
-  if (m.night) f = "NIGHT \xC2\xB7 " + f;
+  // "NIGHT" is a hint the colors already give; drop it when the line is full.
+  if (m.night && footer_.fits("NIGHT \xC2\xB7 " + f)) f = "NIGHT \xC2\xB7 " + f;
   footer_.set(f);
   footer_.setColor(fc);
 }

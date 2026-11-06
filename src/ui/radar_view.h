@@ -64,6 +64,7 @@ class RadarView {
     const lv_font_t* font;
     uint32_t color;
     lv_area_t area;
+    bool hidden;  // an aircraft icon is on top of it
   };
 
   static void eventCb(lv_event_t* e);
