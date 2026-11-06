@@ -39,6 +39,8 @@ void readField(JsonObjectConst o, const char* key, T& field) {
     if (d < lo) d = lo;
     if (d > hi) d = hi;
     field = static_cast<T>(d);
+  } else if (v.is<bool>()) {
+    field = static_cast<T>(v.as<bool>() ? 1 : 0);
   }
 }
 
@@ -53,6 +55,7 @@ Settings Settings::defaults() {
   s.observerLon = RADAR_OBSERVER_LON;
   s.observerAltFt = RADAR_OBSERVER_ALT_FT;
   s.viewBearingDeg = RADAR_VIEW_BEARING_DEG;
+  s.northUp = RADAR_NORTH_UP;
   s.screenRotation = RADAR_SCREEN_ROTATION;
   s.rangeNm = RADAR_DEFAULT_RANGE_NM;
   s.refreshS = RADAR_REFRESH_INTERVAL_S;
@@ -64,14 +67,25 @@ Settings Settings::defaults() {
   s.nightStartH = RADAR_NIGHT_START_H;
   s.nightEndH = RADAR_NIGHT_END_H;
   s.nightBrightness = RADAR_NIGHT_BRIGHTNESS;
+  s.nightMode = RADAR_NIGHT_MODE;
+  s.blackoutS = RADAR_BLACKOUT_S;
+  s.alerts = 1;
   s.sanitize();
   return s;
 }
 
-double Settings::effectiveUpBearing() const {
+bool Settings::observerSet() const { return distanceNm(observer(), center()) >= 0.05; }
+
+double Settings::facingBearing() const {
   if (viewBearingDeg >= 0) return viewBearingDeg;
-  if (distanceNm(observer(), center()) < 0.05) return 0;
+  if (!observerSet()) return NAN;
   return bearingDeg(observer(), center());
+}
+
+double Settings::effectiveUpBearing() const {
+  if (northUp) return 0;
+  const double f = facingBearing();
+  return std::isnan(f) ? 0 : f;
 }
 
 bool Settings::sanitize() {
@@ -95,6 +109,7 @@ bool Settings::sanitize() {
     viewBearingDeg = static_cast<int16_t>(((viewBearingDeg % 360) + 360) % 360);
     changed = true;
   }
+  changed |= clampField<uint8_t>(northUp, 0, 1);
   changed |= clampField<uint8_t>(screenRotation, 0, 3);
 
   const uint16_t snapped = kRangeSteps[nearestRangeStep(rangeNm)];
@@ -111,6 +126,9 @@ bool Settings::sanitize() {
   changed |= clampField<uint8_t>(nightStartH, 0, 23);
   changed |= clampField<uint8_t>(nightEndH, 0, 23);
   changed |= clampField<uint8_t>(nightBrightness, 1, 100);
+  changed |= clampField<uint8_t>(nightMode, 0, 2);
+  changed |= clampField<uint16_t>(blackoutS, 0, 36000);
+  changed |= clampField<uint8_t>(alerts, 0, 1);
 
   centerName[sizeof(centerName) - 1] = 0;
   size_t n = 0;
@@ -151,6 +169,7 @@ void toDoc(const Settings& s, JsonDocument& doc) {
   doc["observerLon"] = s.observerLon;
   doc["observerAltFt"] = s.observerAltFt;
   doc["viewBearingDeg"] = s.viewBearingDeg;
+  doc["northUp"] = s.northUp;
   doc["screenRotation"] = s.screenRotation;
   doc["rangeNm"] = s.rangeNm;
   doc["refreshS"] = s.refreshS;
@@ -162,6 +181,9 @@ void toDoc(const Settings& s, JsonDocument& doc) {
   doc["nightStartH"] = s.nightStartH;
   doc["nightEndH"] = s.nightEndH;
   doc["nightBrightness"] = s.nightBrightness;
+  doc["nightMode"] = s.nightMode;
+  doc["blackoutS"] = s.blackoutS;
+  doc["alerts"] = s.alerts;
 }
 
 }  // namespace
@@ -206,6 +228,7 @@ bool settingsFromJson(const char* json, size_t len, Settings& s, std::string* er
   readField(o, "observerLon", n.observerLon);
   readField(o, "observerAltFt", n.observerAltFt);
   readField(o, "viewBearingDeg", n.viewBearingDeg);
+  readField(o, "northUp", n.northUp);
   readField(o, "screenRotation", n.screenRotation);
   readField(o, "rangeNm", n.rangeNm);
   readField(o, "refreshS", n.refreshS);
@@ -217,6 +240,9 @@ bool settingsFromJson(const char* json, size_t len, Settings& s, std::string* er
   readField(o, "nightStartH", n.nightStartH);
   readField(o, "nightEndH", n.nightEndH);
   readField(o, "nightBrightness", n.nightBrightness);
+  readField(o, "nightMode", n.nightMode);
+  readField(o, "blackoutS", n.blackoutS);
+  readField(o, "alerts", n.alerts);
   n.sanitize();
   s = n;
   return true;

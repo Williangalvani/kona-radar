@@ -16,12 +16,13 @@ struct Settings {
   double centerLat;
   double centerLon;
   char centerName[8];
-  // Observer (balcony)
+  // Observer (where the radar is mounted; equal to the center = not set)
   double observerLat;
   double observerLon;
   int32_t observerAltFt;
   // Orientation
-  int16_t viewBearingDeg;  // -1 = auto (observer -> center), else 0..359
+  int16_t viewBearingDeg;  // facing bearing: -1 = auto (observer -> center), else 0..359
+  uint8_t northUp;         // 0 = facing bearing at the top, 1 = north at the top
   uint8_t screenRotation;  // physical mounting, clockwise quarter turns 0..3
   // Range / data
   uint16_t rangeNm;
@@ -35,12 +36,20 @@ struct Settings {
   uint8_t nightStartH;
   uint8_t nightEndH;
   uint8_t nightBrightness;
+  uint8_t nightMode;  // 0 = by the hours, 1 = always day, 2 = always night
+  uint16_t blackoutS;
+  uint8_t alerts;  // full-screen arrival alerts on/off
 
   static Settings defaults();
 
   LatLon center() const { return {centerLat, centerLon}; }
   LatLon observer() const { return {observerLat, observerLon}; }
 
+  // False while the observer is still the neutral default (the center).
+  bool observerSet() const;
+  // Direction the viewer faces (degrees true), or NAN when it is "auto" and
+  // the observer is not set.
+  double facingBearing() const;
   // Compass bearing shown at the top of the screen.
   double effectiveUpBearing() const;
 
@@ -48,7 +57,7 @@ struct Settings {
   bool sanitize();
 };
 
-// Range steps offered by the -/+ buttons (from RADAR_RANGE_STEPS_NM).
+// Range steps the range control cycles through (from RADAR_RANGE_STEPS_NM).
 const uint16_t* rangeSteps(size_t& count);
 // Index of the step closest to `nm`.
 size_t nearestRangeStep(uint16_t nm);

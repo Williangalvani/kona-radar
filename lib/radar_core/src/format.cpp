@@ -42,12 +42,12 @@ const CodeName kTypes[] = {
 
 // ICAO airline designators seen around Hawaii.
 const CodeName kAirlines[] = {
-    {"HAL", "Hawaiian Airlines"},   {"ASA", "Alaska Airlines"},  {"SWA", "Southwest"},
+    {"HAL", "Hawaiian"},            {"ASA", "Alaska"},           {"SWA", "Southwest"},
     {"UAL", "United"},              {"AAL", "American"},         {"DAL", "Delta"},
     {"WJA", "WestJet"},             {"ACA", "Air Canada"},       {"JAL", "Japan Airlines"},
-    {"ANA", "All Nippon Airways"},  {"KAL", "Korean Air"},       {"QFA", "Qantas"},
+    {"ANA", "ANA"},  {"KAL", "Korean Air"},       {"QFA", "Qantas"},
     {"ANZ", "Air New Zealand"},     {"FJI", "Fiji Airways"},     {"CPA", "Cathay Pacific"},
-    {"FDX", "FedEx"},               {"UPS", "UPS"},              {"MUL", "Mokulele Airlines"},
+    {"FDX", "FedEx"},               {"UPS", "UPS"},              {"MUL", "Mokulele"},
     {"KMK", "Kamaka Air"},          {"SCX", "Sun Country"},      {"AAH", "Aloha Air Cargo"},
     {"TCX", "Transair"},            {"VJA", "Vista America"},    {"EJA", "NetJets"},
     {"RCH", "US Air Force (Reach)"}, {"CPT", "Corporate Air"},   {"PCO", "Pacific Coastal"},
@@ -182,6 +182,48 @@ const char* operatorName(const Aircraft& a, char* buf, size_t cap) {
     }
   }
   return titleCase(a.owner, buf, cap);
+}
+
+const char* relativeDirection(double relDeg, char* buf, size_t cap) {
+  if (std::isnan(relDeg)) {
+    copyStr(buf, cap, "");
+  } else {
+    const long a = std::lround(std::fabs(relDeg));
+    if (a <= 7)
+      copyStr(buf, cap, "AHEAD");
+    else if (a >= 165)
+      copyStr(buf, cap, "BEHIND");
+    else
+      std::snprintf(buf, cap, "%s %ld\u00b0", relDeg > 0 ? "RIGHT" : "LEFT", a);
+  }
+  return buf;
+}
+
+const char* lookCue(double relDeg, double bearingDeg, char* buf, size_t cap) {
+  if (std::isnan(relDeg)) {
+    std::snprintf(buf, cap, "LOOK %s", compassPoint(bearingDeg));
+  } else {
+    const double a = std::fabs(relDeg);
+    std::snprintf(buf, cap, "LOOK %s",
+                  a <= 7 ? "AHEAD" : a >= 165 ? "BEHIND" : relDeg > 0 ? "RIGHT" : "LEFT");
+  }
+  return buf;
+}
+
+const char* etaText(float etaS, char* buf, size_t cap) {
+  if (etaS < 20) {
+    copyStr(buf, cap, "NOW");
+  } else {
+    const long m = static_cast<long>(std::ceil(etaS / 60.0f));
+    std::snprintf(buf, cap, "~%ld MIN", m < 1 ? 1 : m);
+  }
+  return buf;
+}
+
+const char* bearingText(double bearingDeg, char* buf, size_t cap) {
+  const long b = std::lround(wrap360(bearingDeg)) % 360;
+  std::snprintf(buf, cap, "%s %03ld\u00b0T", compassPoint(bearingDeg), b);
+  return buf;
 }
 
 }  // namespace radar
