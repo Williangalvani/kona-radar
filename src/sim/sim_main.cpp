@@ -473,7 +473,7 @@ int main() {
   run(300);
   shot("13_phone_settings_link");
   tap(233, 233);
-  tap(108, 79);
+  run(300);
 
   std::printf("hold to reset Wi-Fi\n");
   press(200, 200, 2500);
@@ -497,6 +497,11 @@ int main() {
     m.exampleData = false;
     run(1500);
     shot("15_radar_20nm_observer_not_set");
+    tap(190, 60);
+    run(300);
+    shot("15b_alignment_location_not_set");
+    tap(108, 79);
+    run(300);
     m.feedAgeS = 45;
     run(400);
     shot("16_radar_stale_feed");

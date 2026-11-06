@@ -125,8 +125,12 @@ void RadarScreen::refresh(const Model& m) {
     f = buf;
     fc = p.amber;
   } else {
-    for (char c : m.feedSource) f += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    f += s.observerSet() ? " \xC2\xB7 LIVE" : " \xC2\xB7 SET LOCATION ON PHONE";
+    if (s.observerSet()) {
+      for (char c : m.feedSource) f += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      f += " \xC2\xB7 LIVE";
+    } else {
+      f = "SET YOUR LOCATION ON PHONE";
+    }
   }
   if (m.night) f = "NIGHT \xC2\xB7 " + f;
   footer_.set(f);
