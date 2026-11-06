@@ -34,12 +34,13 @@ void SettingsStore::loop() {
 
 void SettingsStore::writeNow() {
   dirty_ = false;
-  const std::string json = radar::settingsToJson(pending_);
+  const std::string json = radar::settingsDiffToJson(pending_, radar::Settings::defaults());
   Preferences p;
   if (p.begin(kNsSettings, false)) {
     p.putString("cfg", json.c_str());
     p.end();
   }
+  log_i("settings saved: %s", json.c_str());
 }
 
 void SettingsStore::resetToDefaults() {

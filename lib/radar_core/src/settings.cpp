@@ -141,8 +141,9 @@ size_t nearestRangeStep(uint16_t nm) {
   return best;
 }
 
-std::string settingsToJson(const Settings& s) {
-  JsonDocument doc;
+namespace {
+
+void toDoc(const Settings& s, JsonDocument& doc) {
   doc["centerLat"] = s.centerLat;
   doc["centerLon"] = s.centerLon;
   doc["centerName"] = s.centerName;
@@ -161,9 +162,29 @@ std::string settingsToJson(const Settings& s) {
   doc["nightStartH"] = s.nightStartH;
   doc["nightEndH"] = s.nightEndH;
   doc["nightBrightness"] = s.nightBrightness;
+}
+
+}  // namespace
+
+std::string settingsToJson(const Settings& s) {
+  JsonDocument doc;
+  toDoc(s, doc);
   std::string out;
   serializeJson(doc, out);
   return out;
+}
+
+std::string settingsDiffToJson(const Settings& s, const Settings& base) {
+  JsonDocument cur, ref, out;
+  toDoc(s, cur);
+  toDoc(base, ref);
+  out.to<JsonObject>();
+  for (JsonPair kv : cur.as<JsonObject>()) {
+    if (kv.value() != ref[kv.key()]) out[kv.key()] = kv.value();
+  }
+  std::string json;
+  serializeJson(out, json);
+  return json;
 }
 
 bool settingsFromJson(const char* json, size_t len, Settings& s, std::string* error) {

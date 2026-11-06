@@ -60,12 +60,12 @@ void configureFeed() {
   g_adsb.configure(g_settings.center(), radius, g_settings.refreshS, g_settings.source);
 }
 
-void applySettings(const radar::Settings& s, uint32_t saveDelayMs) {
+void applySettings(const radar::Settings& s, uint32_t saveDelayMs, bool persist = true) {
   const uint8_t oldRotation = g_settings.screenRotation;
   g_settings = s;
   g_settings.sanitize();
   if (g_settings.screenRotation != oldRotation) hal::lvglPortSetRotation(g_settings.screenRotation);
-  g_store.save(g_settings, saveDelayMs);
+  if (persist) g_store.save(g_settings, saveDelayMs);
   configureFeed();
   g_lastActivityMs = millis();
 }
@@ -297,7 +297,7 @@ void setup() {
   hooks.applySettings = [](const radar::Settings& s) { applySettings(s, 0); };
   hooks.resetSettings = [] {
     g_store.resetToDefaults();
-    applySettings(radar::Settings::defaults(), 0);
+    applySettings(radar::Settings::defaults(), 0, false);
   };
   hooks.statusJson = statusJson;
   g_web.begin(&g_wifi, hooks);
