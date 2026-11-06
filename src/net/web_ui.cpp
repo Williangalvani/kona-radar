@@ -124,8 +124,14 @@ void WebUi::handleWifiStatus() {
     case WifiState::PortalTrying:
       state = "trying";
       break;
+    case WifiState::PortalOnline:
+      state = "online";
+      break;
     case WifiState::PortalDone:
       state = "done";
+      break;
+    case WifiState::PortalFailed:
+      state = "failed";
       break;
     case WifiState::Connecting:
     case WifiState::Offline:
@@ -136,7 +142,7 @@ void WebUi::handleWifiStatus() {
   }
   String body = String("{\"state\":\"") + state + "\",\"ssid\":\"" +
                 jsonEscape(wifi_->state() == WifiState::PortalTrying ? wifi_->tryingSsid() : wifi_->savedSsid()) +
-                "\",\"error\":\"" + jsonEscape(wifi_->lastError()) + "\"}";
+                "\",\"error\":\"" + jsonEscape(wifi_->lastError()) + "\",\"host\":\"" RADAR_HOSTNAME ".local\"}";
   sendJson(200, body);
 }
 

@@ -1,11 +1,15 @@
 #include "settings_store.h"
 
 #include <Preferences.h>
+#include <esp_random.h>
+
+#include "config.h"
 
 namespace app {
 namespace {
 constexpr const char* kNsSettings = "radar";
 constexpr const char* kNsWifi = "wifi";
+constexpr const char* kNsSetup = "setup";
 }  // namespace
 
 radar::Settings SettingsStore::load() {
@@ -76,6 +80,22 @@ void SettingsStore::forgetWifi() {
     p.clear();
     p.end();
   }
+}
+
+String SettingsStore::setupPassword() {
+  Preferences p;
+  String pass;
+  if (p.begin(kNsSetup, false)) {
+    pass = p.getString("appass", "");
+    if (pass.length() < 8) {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%s%04u", RADAR_AP_PASS_PREFIX, static_cast<unsigned>(esp_random() % 10000));
+      pass = buf;
+      p.putString("appass", pass);
+    }
+    p.end();
+  }
+  return pass;
 }
 
 }  // namespace app

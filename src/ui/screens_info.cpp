@@ -82,7 +82,7 @@ void DetailScreen::refresh(const Model& m) {
     return;
   }
   const radar::Aircraft& a = t->track->ac;
-  char buf[48], buf2[48];
+  char buf[64], buf2[32];
   callsign_.set(radar::displayName(a, buf, sizeof(buf)));
   radar::operatorName(a, buf, sizeof(buf));
   radar::aircraftTypeName(a, buf2, sizeof(buf2));
