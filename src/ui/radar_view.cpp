@@ -30,6 +30,12 @@ bool overlaps(const lv_area_t& a, const lv_area_t& b) {
   return a.x1 <= b.x2 && b.x1 <= a.x2 && a.y1 <= b.y2 && b.y1 <= a.y2;
 }
 
+int overlapArea(const lv_area_t& a, const lv_area_t& b) {
+  const int w = std::min(a.x2, b.x2) - std::max(a.x1, b.x1) + 1;
+  const int h = std::min(a.y2, b.y2) - std::max(a.y1, b.y1) + 1;
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
 void grow(lv_area_t& a, int x, int y) {
   a.x1 = static_cast<lv_coord_t>(std::min<int>(a.x1, x));
   a.y1 = static_cast<lv_coord_t>(std::min<int>(a.y1, y));
@@ -260,6 +266,19 @@ void RadarView::update(const Model& m, const char* focusHex, bool force) {
   }
   placeLabels(next);
 
+  // Airport and runway labels give way to an aircraft icon sitting on them;
+  // drawing both leaves neither readable. A wingtip grazing one is fine.
+  for (StaticText& t : texts_) {
+    const int area = lv_area_get_size(&t.area);
+    bool covered = false;
+    for (const Blip& b : next) covered |= overlapArea(t.area, box(b.x, b.y, 9)) * 100 >= area * 15;
+    if (covered == t.hidden) continue;
+    t.hidden = covered;
+    lv_area_t a = t.area;
+    lv_area_move(&a, obj_->coords.x1, obj_->coords.y1);
+    lv_obj_invalidate_area(obj_, &a);
+  }
+
   auto same = [](const Blip& a, const Blip& b) {
     return std::lround(a.x * 2) == std::lround(b.x * 2) && std::lround(a.y * 2) == std::lround(b.y * 2) &&
            a.iconIdx == b.iconIdx && a.kind == b.kind && a.color == b.color && a.focus == b.focus &&
@@ -405,7 +424,7 @@ void RadarView::drawMain(lv_event_t* e) {
   };
   for (const StaticText& t : texts_) {
     const lv_area_t a = toScreen(t.area);
-    if (!overlaps(a, clip)) continue;
+    if (t.hidden || !overlaps(a, clip)) continue;
     lv_draw_label_dsc_t d;
     lv_draw_label_dsc_init(&d);
     d.font = t.font;
@@ -418,7 +437,10 @@ void RadarView::drawMain(lv_event_t* e) {
     const lv_color_t c = col(b.color);
     if (b.arrivalLine) {
       const float dx = b.tx - b.x, dy = b.ty - b.y, len = std::hypot(dx, dy);
-      if (len > 20) draw::dashed(s, b.x + dx / len * 14, b.y + dy / len * 14, b.tx, b.ty, 1.0f, 4, 4, col(p.arrivalLine));
+      // From just outside the icon, or outside the focus rings as designed.
+      const float start = b.focus ? 25.0f : 14.0f;
+      if (len > start + 6)
+        draw::dashed(s, b.x + dx / len * start, b.y + dy / len * start, b.tx, b.ty, 1.0f, 4, 4, col(p.arrivalLine));
     }
     for (int i = 0; i < b.trailN; ++i) draw::fillCircle(s, b.trail[i].x, b.trail[i].y, 1.2f, col(p.accentDim));
     if (b.focus) {

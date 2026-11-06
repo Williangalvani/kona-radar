@@ -26,14 +26,21 @@ class Text {
   void moveTo(int x, int y);
   void show(bool on);
   int width() const;
+  // Width of `s` in this label's font and spacing.
+  int measure(const std::string& s) const { return measure(s, tracking_); }
+  // Keeps the text within `px` by dropping the letter spacing when needed.
+  void setMaxWidth(int px);
+  // Whether `s` would fit the max width (at the tightest spacing).
+  bool fits(const std::string& s) const;
   lv_obj_t* obj() const { return obj_; }
   const std::string& text() const { return text_; }
 
  private:
   void place();
+  int measure(const std::string& s, int tracking) const;
   lv_obj_t* obj_ = nullptr;
   const lv_font_t* font_ = nullptr;
-  int x_ = 0, y_ = 0, tracking_ = 0;
+  int x_ = 0, y_ = 0, tracking_ = 0, shownTracking_ = 0, maxWidth_ = 0;
   Align align_ = Align::Center;
   uint32_t color_ = 0xFFFFFFFF;
   std::string text_;

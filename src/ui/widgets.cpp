@@ -12,7 +12,8 @@ void Text::create(lv_obj_t* parent, int x, int y, const lv_font_t* font, uint32_
   x_ = x;
   y_ = y;
   align_ = align;
-  tracking_ = tracking;
+  tracking_ = shownTracking_ = tracking;
+  maxWidth_ = 0;
   font_ = font;
   text_.clear();
   color_ = 0xFFFFFFFF;
@@ -23,13 +24,27 @@ void Text::create(lv_obj_t* parent, int x, int y, const lv_font_t* font, uint32_
   place();
 }
 
-int Text::width() const {
-  return lv_txt_get_width(text_.c_str(), static_cast<uint32_t>(text_.size()), font_,
-                          static_cast<lv_coord_t>(tracking_), LV_TEXT_FLAG_NONE);
+int Text::measure(const std::string& s, int tracking) const {
+  return lv_txt_get_width(s.c_str(), static_cast<uint32_t>(s.size()), font_, static_cast<lv_coord_t>(tracking),
+                          LV_TEXT_FLAG_NONE);
 }
+
+int Text::width() const { return measure(text_, shownTracking_); }
+
+void Text::setMaxWidth(int px) {
+  maxWidth_ = px;
+  place();
+}
+
+bool Text::fits(const std::string& s) const { return maxWidth_ <= 0 || measure(s, 0) <= maxWidth_; }
 
 void Text::place() {
   if (!obj_) return;
+  const int tracking = maxWidth_ > 0 && measure(text_, tracking_) > maxWidth_ ? 0 : tracking_;
+  if (tracking != shownTracking_) {
+    shownTracking_ = tracking;
+    lv_obj_set_style_text_letter_space(obj_, static_cast<lv_coord_t>(tracking), 0);
+  }
   const int w = width();
   int x = x_;
   if (align_ == Align::Center) x -= w / 2;
@@ -187,6 +202,10 @@ void topHeader(lv_obj_t* parent, Text& title, const char* text) {
 
 void footer(lv_obj_t* parent, Text& t, const char* text, uint32_t color) {
   t.create(parent, 233, 429, font::mono(11), color, Align::Center, 1);
+  // The bottom of the round screen is narrow: at the footer's baseline the
+  // design's text safe area (radius 228, 2 px kept for the pixel shift) is
+  // 194 px wide.
+  t.setMaxWidth(194);
   t.set(text);
 }
 

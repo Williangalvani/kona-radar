@@ -115,6 +115,7 @@ void arc(Surface& s, float cx, float cy, float r, float width, float startDeg, f
   float a0 = std::fmod(startDeg, 360.0f);
   if (a0 < 0) a0 += 360;
   const float span = endDeg - startDeg;
+  if (span <= 0) return;
   const float inner2 = std::max(0.0f, r - width * 0.5f - 1);
   for (int y = y0; y <= y1; ++y) {
     const float py = y + 0.5f - cy;
@@ -125,11 +126,16 @@ void arc(Surface& s, float cx, float cy, float r, float width, float startDeg, f
       uint8_t a = cov(width * 0.5f + 0.5f - std::fabs(d - r));
       if (!a) continue;
       if (!full) {
+        // Square ends, antialiased: coverage from the pixel's distance (along
+        // the arc) to the nearer end.
         float ang = std::atan2(py, px) * 180.0f / kPi;
         if (ang < 0) ang += 360;
         float rel = ang - a0;
         if (rel < 0) rel += 360;
-        if (rel > span) continue;
+        const float inside = rel <= span ? std::min(rel, span - rel) : -std::min(rel - span, 360 - rel);
+        const uint8_t e = cov(0.5f + inside * kPi / 180.0f * d);
+        if (!e) continue;
+        a = static_cast<uint8_t>((a * e + 127) / 255);
       }
       s.blend(x, y, c, scale(a, opa));
     }
