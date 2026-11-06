@@ -345,11 +345,12 @@ void AlignmentScreen::refresh(const Model& m) {
   mode_.set(s.northUp ? "TRUE BEARING \xC2\xB7 NORTH UP" : "TRUE BEARING \xC2\xB7 VIEW UP");
   koa_.set(s.centerName);
 
-  float runwayRel = 0;
+  // Without a facing direction the mark is just a level runway symbol.
+  float runwayRel = 90;
   if (const radar::Place* ap = radar::airportNear(s.center())) {
-    if (ap->runwayCount)
+    if (ap->runwayCount && known)
       runwayRel = static_cast<float>(radar::bearingDeg(ap->runways[0].threshold[0], ap->runways[0].threshold[1]) -
-                                     (known ? facing : 0));
+                                     facing);
   }
   if (std::fabs(runwayRel - runwayRel_) > 0.5f) {
     runwayRel_ = runwayRel;
