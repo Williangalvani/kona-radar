@@ -1,0 +1,12 @@
+PASS 12 native screens: 466×466, circular gray surround, true-black interior
+PASS 12 device composites: 600×600
+PASS labeled contact sheet: 2160×1930, 12 entries
+PASS 120 critical text bounds within radius 228; 2px shift reserve
+PASS QR decodes at native 466px: standard WPA Wi-Fi payload, demo AP
+PASS 10 NM range has exactly 6 example aircraft
+PASS 5 NM range has exactly 4 example aircraft
+PASS KOA: 5.48 km at 260.38°T, directly ahead in view-up
+PASS direction cues: overview 76.97° right; later alert 47.00° right
+PASS specification, source, manifest, font license present
+VISUAL REVIEW: all 12 native screens, bezel and contact sheet inspected; zoom labels revised
+LIMITATION: no physical display, touch, sunlight, feed or firmware validation performed

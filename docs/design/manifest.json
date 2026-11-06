@@ -1,0 +1,262 @@
+{
+  "screens": [
+    {
+      "id": "01_splash",
+      "title": "Power on",
+      "screen": "screens/01_splash.png",
+      "device": "device/01_splash_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "02_wifi_setup_qr",
+      "title": "01 / Phone setup",
+      "screen": "screens/02_wifi_setup_qr.png",
+      "device": "device/02_wifi_setup_qr_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "03_wifi_connecting",
+      "title": "02 / Connecting",
+      "screen": "screens/03_wifi_connecting.png",
+      "device": "device/03_wifi_connecting_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "04_wifi_connected",
+      "title": "03 / Connected",
+      "screen": "screens/04_wifi_connected.png",
+      "device": "device/04_wifi_connected_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "05_wifi_failed",
+      "title": "04 / Connection failed",
+      "screen": "screens/05_wifi_failed.png",
+      "device": "device/05_wifi_failed_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "06_radar_view_aligned",
+      "title": "View-aligned radar",
+      "screen": "screens/06_radar_view_aligned.png",
+      "device": "device/06_radar_view_aligned_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "07_radar_zoom_5nm",
+      "title": "Closer to the runway",
+      "screen": "screens/07_radar_zoom_5nm.png",
+      "device": "device/07_radar_zoom_5nm_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "08_aircraft_detail",
+      "title": "Aircraft detail",
+      "screen": "screens/08_aircraft_detail.png",
+      "device": "device/08_aircraft_detail_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "09_look_up_alert",
+      "title": "Look up",
+      "screen": "screens/09_look_up_alert.png",
+      "device": "device/09_look_up_alert_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "10_night_mode",
+      "title": "Night mode",
+      "screen": "screens/10_night_mode.png",
+      "device": "device/10_night_mode_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "11_idle_dim",
+      "title": "Quiet idle",
+      "screen": "screens/11_idle_dim.png",
+      "device": "device/11_idle_dim_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    },
+    {
+      "id": "12_balcony_alignment",
+      "title": "Your balcony view",
+      "screen": "screens/12_balcony_alignment.png",
+      "device": "device/12_balcony_alignment_device.png",
+      "screen_size": [
+        466,
+        466
+      ],
+      "device_size": [
+        600,
+        600
+      ]
+    }
+  ],
+  "observer": {
+    "lat": 19.747,
+    "lon": -155.994,
+    "view_bearing_true": 260
+  },
+  "airport": {
+    "lat": 19.738765,
+    "lon": -156.045631
+  },
+  "aircraft": [
+    {
+      "id": "HAL208",
+      "operator": "Hawaiian",
+      "type": "B712",
+      "lat": 19.84,
+      "lon": -156.036,
+      "alt": 1900,
+      "gs": 132,
+      "track": 185,
+      "vr": -600,
+      "squawk": "3142",
+      "state": "approach"
+    },
+    {
+      "id": "SWA250",
+      "operator": "Southwest",
+      "type": "B38M",
+      "lat": 19.786,
+      "lon": -156.043,
+      "alt": 2300,
+      "gs": 155,
+      "track": 5,
+      "vr": 1400,
+      "squawk": "4271",
+      "state": "departing"
+    },
+    {
+      "id": "ASA875",
+      "operator": "Alaska",
+      "type": "B738",
+      "lat": 19.6748,
+      "lon": -156.1098,
+      "alt": 4400,
+      "gs": 210,
+      "track": 34,
+      "vr": -700,
+      "squawk": "2143",
+      "state": "traffic"
+    },
+    {
+      "id": "HAL123",
+      "operator": "Hawaiian",
+      "type": "B712",
+      "lat": 19.6714,
+      "lon": -156.0302,
+      "alt": 3600,
+      "gs": 178,
+      "track": 344,
+      "vr": -500,
+      "squawk": "3254",
+      "state": "traffic"
+    },
+    {
+      "id": "MHO507",
+      "operator": "Mokulele",
+      "type": "C208",
+      "lat": 19.7886,
+      "lon": -155.9698,
+      "alt": 2800,
+      "gs": 110,
+      "track": 189,
+      "vr": 0,
+      "squawk": "1200",
+      "state": "traffic"
+    },
+    {
+      "id": "N123BH",
+      "operator": "Tour helicopter",
+      "type": "EC30",
+      "lat": 19.7151,
+      "lon": -156.0191,
+      "alt": 900,
+      "gs": 85,
+      "track": 319,
+      "vr": 0,
+      "squawk": "1200",
+      "state": "helicopter"
+    }
+  ],
+  "qr_payload": "WIFI:T:WPA;S:Kona-Radar-7A2C;P:look-up-7412;;"
+}

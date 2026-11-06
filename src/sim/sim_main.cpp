@@ -175,10 +175,10 @@ std::vector<radar::Aircraft> designTraffic() {
   return {
       makeAc("a1d208", "HAL208", "N475HA", "B712", "BOEING 717-200", "3142", 19.840, -156.036, 1900, 132, 185, -600),
       makeAc("a8a250", "SWA250", "N8810L", "B38M", "BOEING 737 MAX 8", "4271", 19.786, -156.043, 2300, 155, 5, 1400),
-      makeAc("a5a875", "ASA875", "N563AS", "B738", "BOEING 737-800", "2143", 19.700, -156.125, 4400, 210, 55, -700),
-      makeAc("a1d123", "HAL123", "N481HA", "B712", "BOEING 717-200", "3254", 19.670, -156.052, 3600, 178, 5, -500),
-      makeAc("a6c507", "MHO507", "N507MH", "C208", "CESSNA 208 CARAVAN", "1200", 19.759, -155.951, 2800, 110, 210, 0),
-      makeAc("a0b123", "N123BH", "N123BH", "EC30", "", "1200", 19.707, -156.025, 900, 85, 340, 0),
+      makeAc("a5a875", "ASA875", "N563AS", "B738", "BOEING 737-800", "2143", 19.6748, -156.1098, 4400, 210, 34, -700),
+      makeAc("a1d123", "HAL123", "N481HA", "B712", "BOEING 717-200", "3254", 19.6714, -156.0302, 3600, 178, 344, -500),
+      makeAc("a6c507", "MHO507", "N507MH", "C208", "CESSNA 208 CARAVAN", "1200", 19.7886, -155.9698, 2800, 110, 189, 0),
+      makeAc("a0b123", "N123BH", "N123BH", "EC30", "", "1200", 19.7151, -156.0191, 900, 85, 319, 0),
   };
 }
 
@@ -330,12 +330,10 @@ int main() {
 
   ui::Model& m = g_app.model;
   m.settings = radar::Settings::defaults();
-  // A made-up observer (not anyone's real location) 4 NM east-southeast of
-  // KOA, facing 281 degrees true like the design.
-  const radar::LatLon observer = radar::destination(m.settings.center(), 115, 4.0);
-  m.settings.observerLat = observer.lat;
-  m.settings.observerLon = observer.lon;
-  m.settings.viewBearingDeg = 281;
+  // The placeholder observer from docs/design (not anyone's real balcony).
+  m.settings.observerLat = 19.7470;
+  m.settings.observerLon = -155.9940;
+  m.settings.viewBearingDeg = 260;
   m.apSsid = "Kona-Radar-7A2C";
   m.apPassword = "look-up-7412";
   m.portalIp = "192.168.4.1";
@@ -407,31 +405,18 @@ int main() {
   expect(m.settings.rangeNm == 5, "and wraps 20 -> 5 NM");
   run(400);
   {
-    const lv_point_t p = blipAt("a6c507");
+    const lv_point_t p = blipAt("a8a250");
     tap(p.x, p.y);
-    expect(g_ui.focusedAircraft() == "a6c507", "tapping MHO507 selects it");
+    expect(g_ui.focusedAircraft() == "a8a250", "tapping SWA250 selects it");
   }
   run(1200);
   shot("07_radar_zoom_5nm");
   {
-    const lv_point_t p = blipAt("a6c507");
+    const lv_point_t p = blipAt("a8a250");
     tap(p.x, p.y);
   }
   run(300);
-  shot("08c_detail_traffic");
-  tap(108, 79);
-  m.settings.rangeNm = 10;
-  run(400);
-  {
-    const lv_point_t p = blipAt("a8a250");
-    tap(p.x, p.y);
-    expect(g_ui.focusedAircraft() == "a8a250", "tapping SWA250 selects it");
-    run(600);
-    shot("07b_radar_departure_selected");
-    tap(233, 373);
-    run(300);
-    shot("08b_detail_departure");
-  }
+  shot("08b_detail_departure");
   tap(108, 79);
   m.settings.rangeNm = 5;
   run(300);
@@ -498,7 +483,7 @@ int main() {
   press(200, 200, 5200);
   release();
   expect(g_app.wifiResets == 1, "holding 5 s resets Wi-Fi");
-  expect(m.settings.rangeNm == 10 && m.settings.viewBearingDeg == 281, "other settings untouched by the hold");
+  expect(m.settings.rangeNm == 10 && m.settings.viewBearingDeg == 260, "other settings untouched by the hold");
 
   std::printf("north-up, unset observer, live fixture traffic\n");
   {

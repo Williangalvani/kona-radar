@@ -333,7 +333,9 @@ void AlignmentScreen::refresh(const Model& m) {
   const double facing = s.facingBearing();
   const bool known = !std::isnan(facing);
   char buf[48];
-  heading_.set(!s.observerSet() ? "Set your location" : s.viewBearingDeg < 0 ? "Face the airport" : "Your view");
+  const bool facesAirport =
+      known && std::fabs(radar::wrap180(radar::bearingDeg(s.observer(), s.center()) - facing)) <= 3.0;
+  heading_.set(!s.observerSet() ? "Set your location" : facesAirport ? "Face the airport" : "Your view");
   if (known) {
     std::snprintf(buf, sizeof(buf), "%ld\xC2\xB0", std::lround(facing) % 360);
     bearing_.set(buf);

@@ -1,0 +1,1322 @@
+[
+  {
+    "screen": "01_splash",
+    "text": "KONA",
+    "max_radius": 87.88,
+    "bounds": [
+      163.9,
+      252,
+      138.1,
+      35.3
+    ]
+  },
+  {
+    "screen": "01_splash",
+    "text": "R A D A R",
+    "max_radius": 95.57,
+    "bounds": [
+      196.5,
+      308,
+      73.0,
+      13.3
+    ]
+  },
+  {
+    "screen": "01_splash",
+    "text": "A window into the sky.",
+    "max_radius": 159.59,
+    "bounds": [
+      156.4,
+      357,
+      153.2,
+      16.0
+    ]
+  },
+  {
+    "screen": "01_splash",
+    "text": "STARTING",
+    "max_radius": 197.13,
+    "bounds": [
+      204.1,
+      421,
+      57.8,
+      7.0
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "FIRST FLIGHT",
+    "max_radius": 193.83,
+    "bounds": [
+      175.2,
+      48,
+      115.7,
+      11.7
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "Set up with your phone",
+    "max_radius": 201.77,
+    "bounds": [
+      102.6,
+      79,
+      260.7,
+      25.3
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "1  Scan to join setup Wi-Fi",
+    "max_radius": 150.68,
+    "bounds": [
+      141.9,
+      113,
+      182.3,
+      16.0
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "2  Follow the sign-in page",
+    "max_radius": 140.49,
+    "bounds": [
+      143.5,
+      325,
+      178.9,
+      16.3
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "Kona-Radar-7A2C",
+    "max_radius": 166.68,
+    "bounds": [
+      161.0,
+      371,
+      144.0,
+      12.3
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "PASS  look-up-7412",
+    "max_radius": 187.94,
+    "bounds": [
+      162.8,
+      395,
+      140.4,
+      12.3
+    ]
+  },
+  {
+    "screen": "02_wifi_setup_qr",
+    "text": "No page? 192.168.4.1",
+    "max_radius": 210.36,
+    "bounds": [
+      161.0,
+      420,
+      144.0,
+      10.7
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "WI-FI SETUP",
+    "max_radius": 192.56,
+    "bounds": [
+      179.6,
+      48,
+      106.8,
+      11.7
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "Joining Wi-Fi",
+    "max_radius": 174.09,
+    "bounds": [
+      144.6,
+      83,
+      176.7,
+      30.7
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "Balcony Wi-Fi",
+    "max_radius": 117.82,
+    "bounds": [
+      181.6,
+      127,
+      102.9,
+      17.0
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "Checking the connection\u2026",
+    "max_radius": 154.94,
+    "bounds": [
+      129.2,
+      330,
+      207.7,
+      18.0
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "PHONE",
+    "max_radius": 195.73,
+    "bounds": [
+      136.0,
+      396,
+      30.0,
+      7.0
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "WI-FI",
+    "max_radius": 170.66,
+    "bounds": [
+      218.0,
+      396,
+      30.0,
+      7.0
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "ONLINE",
+    "max_radius": 197.23,
+    "bounds": [
+      297.0,
+      396,
+      36.0,
+      7.0
+    ]
+  },
+  {
+    "screen": "03_wifi_connecting",
+    "text": "SETUP DEMO",
+    "max_radius": 206.77,
+    "bounds": [
+      197.3,
+      429,
+      71.4,
+      7.7
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "WI-FI SETUP",
+    "max_radius": 192.56,
+    "bounds": [
+      179.6,
+      48,
+      106.8,
+      11.7
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "You\u2019re connected",
+    "max_radius": 189.5,
+    "bounds": [
+      117.2,
+      83,
+      231.6,
+      24.3
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "Balcony Wi-Fi",
+    "max_radius": 113.21,
+    "bounds": [
+      173.0,
+      309,
+      120.0,
+      20.0
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "Your sky is ready.",
+    "max_radius": 138.93,
+    "bounds": [
+      170.3,
+      340,
+      125.3,
+      17.0
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "OPEN RADAR",
+    "max_radius": 174.21,
+    "bounds": [
+      180.2,
+      386,
+      105.7,
+      13.0
+    ]
+  },
+  {
+    "screen": "04_wifi_connected",
+    "text": "SETUP DEMO",
+    "max_radius": 206.77,
+    "bounds": [
+      197.3,
+      429,
+      71.4,
+      7.7
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "WI-FI SETUP",
+    "max_radius": 192.56,
+    "bounds": [
+      179.6,
+      48,
+      106.8,
+      11.7
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "Couldn\u2019t connect",
+    "max_radius": 188.02,
+    "bounds": [
+      119.6,
+      83,
+      226.7,
+      24.3
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "Check the Wi-Fi name",
+    "max_radius": 103.05,
+    "bounds": [
+      148.7,
+      278,
+      168.5,
+      14.3
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "or password on your phone.",
+    "max_radius": 138.4,
+    "bounds": [
+      126.7,
+      304,
+      212.5,
+      17.7
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "TRY AGAIN",
+    "max_radius": 146.02,
+    "bounds": [
+      188.3,
+      359,
+      89.5,
+      13.0
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "Hold 5s to reset Wi-Fi",
+    "max_radius": 196.55,
+    "bounds": [
+      170.5,
+      409,
+      125.1,
+      10.3
+    ]
+  },
+  {
+    "screen": "05_wifi_failed",
+    "text": "SETUP DEMO",
+    "max_radius": 206.77,
+    "bounds": [
+      197.3,
+      429,
+      71.4,
+      7.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "N",
+    "max_radius": 190.54,
+    "bounds": [
+      408.3,
+      276.6039683353813,
+      7.8,
+      9.0
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "KOA",
+    "max_radius": 58.55,
+    "bounds": [
+      220.7,
+      175.91064474631315,
+      25.3,
+      9.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "YOU",
+    "max_radius": 42.83,
+    "bounds": [
+      223.1,
+      267,
+      19.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "HAL208",
+    "max_radius": 154.57,
+    "bounds": [
+      336.4,
+      184,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "SWA250",
+    "max_radius": 79.88,
+    "bounds": [
+      254.4,
+      186,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "ASA875",
+    "max_radius": 153.79,
+    "bounds": [
+      143.4,
+      108,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "HAL123",
+    "max_radius": 136.85,
+    "bounds": [
+      96.4,
+      233,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "MHO507",
+    "max_radius": 131.88,
+    "bounds": [
+      294.4,
+      305,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "N123BH",
+    "max_radius": 97.85,
+    "bounds": [
+      143.4,
+      264,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "KOA",
+    "max_radius": 193.78,
+    "bounds": [
+      206.8,
+      41,
+      52.4,
+      18.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "VIEW 260\u00b0T \u00b7 10 NM",
+    "max_radius": 174.73,
+    "bounds": [
+      162.8,
+      73,
+      140.4,
+      9.0
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "6 ACFT",
+    "max_radius": 195.96,
+    "bounds": [
+      72.2,
+      121,
+      39.6,
+      7.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "APPROACHING KOA",
+    "max_radius": 175.13,
+    "bounds": [
+      109,
+      349,
+      103.2,
+      7.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "~3 MIN",
+    "max_radius": 200.85,
+    "bounds": [
+      109,
+      370,
+      88.9,
+      21.0
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "HAL208",
+    "max_radius": 176.62,
+    "bounds": [
+      300.8,
+      350,
+      53.2,
+      11.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "RIGHT 77\u00b0",
+    "max_radius": 198.75,
+    "bounds": [
+      268.2,
+      377,
+      85.8,
+      13.7
+    ]
+  },
+  {
+    "screen": "06_radar_view_aligned",
+    "text": "EXAMPLE DATA",
+    "max_radius": 208.13,
+    "bounds": [
+      190.1,
+      429,
+      85.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "N",
+    "max_radius": 190.54,
+    "bounds": [
+      408.3,
+      276.6039683353813,
+      7.8,
+      9.0
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "KOA",
+    "max_radius": 107.01,
+    "bounds": [
+      221.0,
+      126.8212894926263,
+      25.3,
+      9.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "YOU",
+    "max_radius": 42.83,
+    "bounds": [
+      223.1,
+      267,
+      19.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "SWA250",
+    "max_radius": 143.88,
+    "bounds": [
+      304.4,
+      146,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "HAL123",
+    "max_radius": 162.17,
+    "bounds": [
+      78.4,
+      184,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "MHO507",
+    "max_radius": 167.49,
+    "bounds": [
+      339.4,
+      300,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "N123BH",
+    "max_radius": 109.84,
+    "bounds": [
+      123.4,
+      232,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "KOA",
+    "max_radius": 193.78,
+    "bounds": [
+      206.8,
+      41,
+      52.4,
+      18.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "VIEW 260\u00b0T \u00b7 05 NM",
+    "max_radius": 174.73,
+    "bounds": [
+      162.8,
+      73,
+      140.4,
+      9.0
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "4 ACFT",
+    "max_radius": 195.96,
+    "bounds": [
+      72.2,
+      121,
+      39.6,
+      7.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "+2",
+    "max_radius": 159.35,
+    "bounds": [
+      366.2,
+      176,
+      15.6,
+      9.0
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "OUTSIDE",
+    "max_radius": 164.59,
+    "bounds": [
+      355.1,
+      194,
+      37.8,
+      6.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "DEPARTING",
+    "max_radius": 175.13,
+    "bounds": [
+      109,
+      349,
+      64.2,
+      7.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "SWA250",
+    "max_radius": 199.02,
+    "bounds": [
+      109,
+      370,
+      93.6,
+      18.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "\u2191 2,300 FT",
+    "max_radius": 177.84,
+    "bounds": [
+      279.1,
+      350,
+      74.9,
+      13.3
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "155 KT",
+    "max_radius": 197.95,
+    "bounds": [
+      296.4,
+      378,
+      57.6,
+      11.7
+    ]
+  },
+  {
+    "screen": "07_radar_zoom_5nm",
+    "text": "EXAMPLE DATA",
+    "max_radius": 208.13,
+    "bounds": [
+      190.1,
+      429,
+      85.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "AIRCRAFT",
+    "max_radius": 189.65,
+    "bounds": [
+      191.3,
+      48,
+      83.5,
+      11.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "HAL208",
+    "max_radius": 169.21,
+    "bounds": [
+      154.7,
+      83,
+      156.6,
+      33.3
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "Hawaiian  \u00b7  Boeing 717",
+    "max_radius": 128.29,
+    "bounds": [
+      145.7,
+      139,
+      174.6,
+      17.0
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "LIKELY ARRIVAL \u00b7 RWY 17",
+    "max_radius": 94.31,
+    "bounds": [
+      157.1,
+      177,
+      151.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "ALTITUDE",
+    "max_radius": 112.1,
+    "bounds": [
+      121.5,
+      237,
+      57.0,
+      7.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "1,900",
+    "max_radius": 139.72,
+    "bounds": [
+      106.2,
+      261,
+      87.6,
+      30.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "FT",
+    "max_radius": 119.46,
+    "bounds": [
+      142.8,
+      303,
+      14.4,
+      8.3
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "GROUND SPEED",
+    "max_radius": 128.42,
+    "bounds": [
+      275.1,
+      237,
+      85.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "132",
+    "max_radius": 126.28,
+    "bounds": [
+      288.8,
+      261,
+      58.3,
+      26.0
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "KT",
+    "max_radius": 120.98,
+    "bounds": [
+      310.8,
+      303,
+      14.4,
+      8.3
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "\u2193 600 FT/MIN",
+    "max_radius": 174.77,
+    "bounds": [
+      102.6,
+      335,
+      94.8,
+      14.3
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "185\u00b0 TRUE",
+    "max_radius": 166.09,
+    "bounds": [
+      281.9,
+      335,
+      72.2,
+      11.7
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "RIGHT 77\u00b0  \u00b7  ~3 MIN",
+    "max_radius": 189.14,
+    "bounds": [
+      141.1,
+      383,
+      183.7,
+      15.3
+    ]
+  },
+  {
+    "screen": "08_aircraft_detail",
+    "text": "EXAMPLE \u00b7 SQUAWK 3142",
+    "max_radius": 219.01,
+    "bounds": [
+      157.7,
+      429,
+      150.6,
+      9.7
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "LIKELY LANDING \u00b7 RWY 17",
+    "max_radius": 199.94,
+    "bounds": [
+      150.2,
+      51,
+      165.6,
+      8.3
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "LOOK RIGHT",
+    "max_radius": 184.64,
+    "bounds": [
+      112.6,
+      93,
+      240.8,
+      32.7
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "47\u00b0 from your balcony view",
+    "max_radius": 132.65,
+    "bounds": [
+      131.2,
+      148,
+      203.7,
+      17.0
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "~1 MIN",
+    "max_radius": 138.68,
+    "bounds": [
+      167.1,
+      325,
+      131.9,
+      30.0
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "HAL208  \u00b7  NW 307\u00b0T",
+    "max_radius": 182.03,
+    "bounds": [
+      145.6,
+      378,
+      174.8,
+      14.7
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "650 FT  \u00b7  120 KT",
+    "max_radius": 198.93,
+    "bounds": [
+      161.6,
+      409,
+      142.8,
+      9.7
+    ]
+  },
+  {
+    "screen": "09_look_up_alert",
+    "text": "EXAMPLE \u00b7 ESTIMATE ONLY",
+    "max_radius": 219.74,
+    "bounds": [
+      150.5,
+      429,
+      165.0,
+      7.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "N",
+    "max_radius": 190.54,
+    "bounds": [
+      408.3,
+      276.6039683353813,
+      7.8,
+      9.0
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "KOA",
+    "max_radius": 58.55,
+    "bounds": [
+      220.7,
+      175.91064474631315,
+      25.3,
+      9.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "YOU",
+    "max_radius": 42.83,
+    "bounds": [
+      223.1,
+      267,
+      19.8,
+      7.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "HAL208",
+    "max_radius": 154.57,
+    "bounds": [
+      336.4,
+      184,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "SWA250",
+    "max_radius": 79.88,
+    "bounds": [
+      254.4,
+      186,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "ASA875",
+    "max_radius": 153.79,
+    "bounds": [
+      143.4,
+      108,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "HAL123",
+    "max_radius": 136.85,
+    "bounds": [
+      96.4,
+      233,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "MHO507",
+    "max_radius": 131.88,
+    "bounds": [
+      294.4,
+      305,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "N123BH",
+    "max_radius": 97.85,
+    "bounds": [
+      143.4,
+      264,
+      43.2,
+      8.3
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "KOA",
+    "max_radius": 193.78,
+    "bounds": [
+      206.8,
+      41,
+      52.4,
+      18.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "VIEW 260\u00b0T \u00b7 10 NM",
+    "max_radius": 174.73,
+    "bounds": [
+      162.8,
+      73,
+      140.4,
+      9.0
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "6 ACFT",
+    "max_radius": 195.96,
+    "bounds": [
+      72.2,
+      121,
+      39.6,
+      7.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "APPROACHING KOA",
+    "max_radius": 175.13,
+    "bounds": [
+      109,
+      349,
+      103.2,
+      7.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "~3 MIN",
+    "max_radius": 200.85,
+    "bounds": [
+      109,
+      370,
+      88.9,
+      21.0
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "HAL208",
+    "max_radius": 176.62,
+    "bounds": [
+      300.8,
+      350,
+      53.2,
+      11.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "RIGHT 77\u00b0",
+    "max_radius": 198.75,
+    "bounds": [
+      268.2,
+      377,
+      85.8,
+      13.7
+    ]
+  },
+  {
+    "screen": "10_night_mode",
+    "text": "NIGHT \u00b7 EXAMPLE DATA",
+    "max_radius": 215.92,
+    "bounds": [
+      161.3,
+      429,
+      143.4,
+      7.7
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "KOA",
+    "max_radius": 108.97,
+    "bounds": [
+      212.4,
+      126,
+      41.2,
+      14.7
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "06",
+    "max_radius": 60.59,
+    "bounds": [
+      197.4,
+      184,
+      71.3,
+      47.7
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "aircraft nearby",
+    "max_radius": 74.29,
+    "bounds": [
+      178.1,
+      266,
+      109.9,
+      17.0
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "Next arrival ~3 min",
+    "max_radius": 121.08,
+    "bounds": [
+      187.0,
+      319,
+      118.0,
+      11.3
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "Tap to wake",
+    "max_radius": 174.0,
+    "bounds": [
+      195.9,
+      389,
+      74.2,
+      14.0
+    ]
+  },
+  {
+    "screen": "11_idle_dim",
+    "text": "EXAMPLE \u00b7 DIM IDLE",
+    "max_radius": 213.63,
+    "bounds": [
+      168.5,
+      429,
+      129.0,
+      7.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "BALCONY ALIGNMENT",
+    "max_radius": 206.06,
+    "bounds": [
+      142.2,
+      48,
+      181.5,
+      11.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "Face the airport",
+    "max_radius": 176.38,
+    "bounds": [
+      137.1,
+      85,
+      191.9,
+      27.3
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "260\u00b0",
+    "max_radius": 119.01,
+    "bounds": [
+      178.9,
+      127,
+      108.2,
+      38.3
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "TRUE BEARING \u00b7 VIEW UP",
+    "max_radius": 91.07,
+    "bounds": [
+      153.8,
+      188,
+      158.4,
+      8.3
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "KOA",
+    "max_radius": 25.06,
+    "bounds": [
+      223.0,
+      210,
+      19.9,
+      7.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "3.0 NM / 5.5 KM AHEAD",
+    "max_radius": 112.01,
+    "bounds": [
+      157.4,
+      305,
+      151.2,
+      10.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "19.7470, -155.9940  (EXAMPLE)",
+    "max_radius": 162.03,
+    "bounds": [
+      119.9,
+      337,
+      226.3,
+      12.0
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "NORTH UP",
+    "max_radius": 189.05,
+    "bounds": [
+      128.7,
+      381,
+      62.6,
+      9.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "VIEW UP",
+    "max_radius": 179.38,
+    "bounds": [
+      265.4,
+      381,
+      53.1,
+      9.7
+    ]
+  },
+  {
+    "screen": "12_balcony_alignment",
+    "text": "EDIT ON PHONE \u00b7 CONFIGURABLE",
+    "max_radius": 227.11,
+    "bounds": [
+      132.5,
+      429,
+      201.0,
+      7.7
+    ]
+  }
+]
