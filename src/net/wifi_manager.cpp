@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <esp_mac.h>
+#include <esp_random.h>
 
 #include <algorithm>
 #include <vector>
@@ -23,24 +24,39 @@ void onStaDisconnected(arduino_event_id_t, arduino_event_info_t info) {
   g_lastReason = info.wifi_sta_disconnected.reason;
 }
 
-const char* reasonText(uint8_t r) {
+SetupError reasonError(uint8_t r) {
   switch (r) {
     case WIFI_REASON_AUTH_FAIL:
     case WIFI_REASON_AUTH_EXPIRE:
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_MIC_FAILURE:
-      return "Wrong password - please check it and try again.";
+      return SetupError::WrongPassword;
     case WIFI_REASON_NO_AP_FOUND:
     case WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY:
     case WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD:
     case WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD:
-      return "Network not found. It must be a 2.4 GHz network within range.";
+      return SetupError::NotFound;
     case WIFI_REASON_ASSOC_FAIL:
     case WIFI_REASON_CONNECTION_FAIL:
-      return "The router refused the connection. Try again.";
+      return SetupError::Refused;
     default:
-      return "Could not connect. Check the password and try again.";
+      return SetupError::WrongPassword;
+  }
+}
+
+const char* errorText(SetupError e) {
+  switch (e) {
+    case SetupError::WrongPassword:
+      return "Wrong password - please check it and try again.";
+    case SetupError::NotFound:
+      return "Network not found. It must be a 2.4 GHz network within range.";
+    case SetupError::Refused:
+      return "The router refused the connection. Try again.";
+    case SetupError::NoInternet:
+      return "Joined the Wi-Fi, but flight data could not be downloaded. Check the router's internet connection.";
+    default:
+      return "";
   }
 }
 
@@ -53,10 +69,11 @@ void WifiManager::begin(app::SettingsStore* store) {
   char buf[40];
   snprintf(buf, sizeof(buf), "%s-%02X%02X", RADAR_AP_PREFIX, mac[4], mac[5]);
   apSsid_ = buf;
-  // Stable per-device setup password: "kona" + 4 digits derived from the MAC.
-  const uint32_t h = (mac[3] * 2654435761u) ^ (mac[4] * 40503u) ^ (mac[5] * 9973u);
-  snprintf(buf, sizeof(buf), "kona%04u", static_cast<unsigned>(h % 10000));
-  apPass_ = buf;
+  apPass_ = store_->setupPassword();
+  if (apPass_.length() < 8) {
+    snprintf(buf, sizeof(buf), "%s%04u", RADAR_AP_PASS_PREFIX, static_cast<unsigned>(esp_random() % 10000));
+    apPass_ = buf;
+  }
 
   WiFi.persistent(false);
   WiFi.onEvent(onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -94,6 +111,7 @@ void WifiManager::connectSaved() {
 void WifiManager::startPortal() {
   if (portalActive()) return;
   lastError_ = "";
+  setupError_ = SetupError::None;
   WiFi.setAutoReconnect(false);
   WiFi.disconnect(false, false);
   WiFi.mode(WIFI_AP_STA);
@@ -113,22 +131,56 @@ void WifiManager::stopAccessPoint() {
   WiFi.mode(WIFI_STA);
 }
 
-void WifiManager::cancelPortal() {
-  // Without a saved network there is nothing to go back to.
-  if (!portalActive() || !hasSavedNetwork()) return;
-  stopAccessPoint();
-  connectSaved();
+void WifiManager::resetAndStartPortal() {
+  log_i("forgetting Wi-Fi \"%s\"", savedSsid_.c_str());
+  store_->forgetWifi();
+  savedSsid_ = savedPass_ = "";
+  if (portalActive()) {
+    WiFi.disconnect(false, false);
+    setupError_ = SetupError::None;
+    lastError_ = "";
+    setState(WifiState::Portal);
+    return;
+  }
+  startPortal();
+}
+
+void WifiManager::retry() {
+  if (state_ != WifiState::PortalFailed) return;
+  if (setupError_ == SetupError::NoInternet && online()) {
+    setState(WifiState::PortalOnline);
+    return;
+  }
+  WiFi.disconnect(false, false);
+  setState(WifiState::Portal);
+}
+
+void WifiManager::confirmInternet() {
+  if (state_ == WifiState::PortalOnline || (state_ == WifiState::PortalFailed && setupError_ == SetupError::NoInternet)) {
+    setupError_ = SetupError::None;
+    lastError_ = "";
+    setState(WifiState::PortalDone);
+  }
+}
+
+void WifiManager::failInternet() {
+  if (state_ != WifiState::PortalOnline) return;
+  setupError_ = SetupError::NoInternet;
+  lastError_ = errorText(setupError_);
+  setState(WifiState::PortalFailed);
 }
 
 bool WifiManager::submitCredentials(const String& ssid, const String& pass) {
-  if (state_ != WifiState::Portal || ssid.length() == 0 || ssid.length() > 32 ||
+  if ((state_ != WifiState::Portal && state_ != WifiState::PortalFailed) || ssid.length() == 0 || ssid.length() > 32 ||
       pass.length() > 63 || (pass.length() > 0 && pass.length() < 8)) {
     return false;
   }
   trySsid_ = ssid;
   tryPass_ = pass;
   lastError_ = "";
+  setupError_ = SetupError::None;
   g_lastReason = 0;
+  WiFi.disconnect(false, false);
   WiFi.setAutoReconnect(false);
   WiFi.begin(trySsid_.c_str(), tryPass_.c_str());
   setState(WifiState::PortalTrying);
@@ -211,15 +263,18 @@ void WifiManager::loop() {
         savedSsid_ = trySsid_;
         savedPass_ = tryPass_;
         store_->saveWifi(savedSsid_, savedPass_);
-        setState(WifiState::PortalDone);
+        WiFi.setAutoReconnect(true);
+        setState(WifiState::PortalOnline);
       } else if (now - stateSince_ > kTryTimeoutMs ||
                  (g_lastReason != 0 && g_lastReason != WIFI_REASON_ASSOC_LEAVE &&
                   now - stateSince_ > 3000)) {
         // Auto-reconnect is off while testing, so any real disconnect reason
         // means this attempt is over.
-        lastError_ = reasonText(g_lastReason);
+        setupError_ = reasonError(g_lastReason);
+        if (g_lastReason == 0) setupError_ = SetupError::NotFound;
+        lastError_ = errorText(setupError_);
         WiFi.disconnect(false, false);
-        setState(WifiState::Portal);
+        setState(WifiState::PortalFailed);
       }
       break;
 

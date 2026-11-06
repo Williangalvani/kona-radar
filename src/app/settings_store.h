@@ -22,6 +22,9 @@ class SettingsStore {
   bool loadWifi(String& ssid, String& pass);
   void saveWifi(const String& ssid, const String& pass);
   void forgetWifi();
+  // Setup-network password, created randomly on first use and kept across
+  // Wi-Fi resets so the printed/remembered QR code stays valid.
+  String setupPassword();
 
  private:
   void writeNow();
