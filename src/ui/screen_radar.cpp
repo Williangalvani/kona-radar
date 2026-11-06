@@ -53,14 +53,14 @@ void RadarScreen::build(lv_obj_t* parent) {
                     {58, 112, 126, 141},
                     {88, 334, 378, 412},
                     {140, 424, 326, 446},
-                    {334, 172, 386, 210}});
+                    {348, 172, 400, 210}});
 
   headerBox_ = panel(root_, 100, 34, 366, 91, 8, 0x000000, 0x000000, false);
   title_.create(root_, 233, 41, font::bold(26), p.title, Align::Center, 2);
   mode_.create(root_, 233, 73, font::mono(13), p.accent);
   count_.create(root_, 92, 115, 11);
-  outsideCount_.create(root_, 360, 176, font::mono(13), p.amber);
-  outsideLabel_.create(root_, 360, 194, font::mono(10), p.muted);
+  outsideCount_.create(root_, 374, 176, font::mono(13), p.amber);
+  outsideLabel_.create(root_, 374, 194, font::mono(10), p.muted);
   outsideLabel_.set("OUTSIDE");
 
   dock_ = panel(root_, 91, 337, 375, 409, 15, p.panel, p.panelLine);
