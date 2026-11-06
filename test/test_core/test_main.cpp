@@ -448,6 +448,28 @@ void test_settings_defaults_and_json() {
   TEST_ASSERT_FALSE(settingsFromJson("[1,2]", 5, r));
 }
 
+void test_settings_diff_stores_only_changes() {
+  const Settings def = Settings::defaults();
+  TEST_ASSERT_EQUAL_STRING("{}", settingsDiffToJson(def, def).c_str());
+
+  Settings s = def;
+  s.rangeNm = 50;
+  s.observerLat = 19.7;
+  const std::string diff = settingsDiffToJson(s, def);
+  TEST_ASSERT_EQUAL_STRING(R"({"observerLat":19.7,"rangeNm":50})", diff.c_str());
+
+  // Loading the diff over (possibly newer) defaults restores the changes and
+  // keeps every other default.
+  Settings newer = def;
+  newer.brightness = 60;
+  TEST_ASSERT_TRUE(settingsFromJson(diff.data(), diff.size(), newer));
+  TEST_ASSERT_EQUAL(50, newer.rangeNm);
+  // ArduinoJson parses decimals with <= 7 significant digits as float
+  // (~0.2 m of latitude here), longer ones as double.
+  TEST_ASSERT_DOUBLE_WITHIN(1e-5, 19.7, newer.observerLat);
+  TEST_ASSERT_EQUAL(60, newer.brightness);
+}
+
 void test_coastline_projects_onto_big_island() {
   // The Big Island polygon must surround a point just inland of KOA and the
   // coastline must pass within a few NM of KOA (it sits on the shore).
@@ -491,6 +513,7 @@ int main(int, char**) {
   RUN_TEST(test_format);
   RUN_TEST(test_rotation_consistency);
   RUN_TEST(test_settings_defaults_and_json);
+  RUN_TEST(test_settings_diff_stores_only_changes);
   RUN_TEST(test_coastline_projects_onto_big_island);
   return UNITY_END();
 }

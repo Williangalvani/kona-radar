@@ -1,9 +1,11 @@
 // Build-time configuration for Kona Radar.
 //
-// Values marked (runtime) are only factory defaults: they are copied to NVS
-// on first boot and can afterwards be changed from a phone on the device's
-// settings page (http://kona-radar.local/ or the IP shown on the device under
-// Settings) without reflashing. "Reset settings" on that page restores them.
+// Values marked (runtime) are factory defaults that can be changed from a
+// phone on the device's settings page (http://kona-radar.local/ or the IP
+// shown on the device under Settings) without reflashing. Only values that
+// were changed are stored in NVS, so untouched settings follow these
+// defaults after a firmware update. "Restore factory settings" on that page
+// clears the stored changes.
 //
 // Every value can be overridden without editing this file by adding
 // -D<NAME>=<value> to build_flags in platformio.ini.
@@ -115,7 +117,7 @@
 #ifndef RADAR_PANEL_PCLK_HZ
 #define RADAR_PANEL_PCLK_HZ (40 * 1000 * 1000)
 #endif
-// Print frame-rate statistics to the serial log every 10 s.
+// Print display throughput and memory statistics to the serial log every 5 s.
 #ifndef RADAR_LOG_FPS
 #define RADAR_LOG_FPS 0
 #endif

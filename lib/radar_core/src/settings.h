@@ -56,6 +56,9 @@ size_t nearestRangeStep(uint16_t nm);
 // JSON (de)serialization. fromJson() only touches keys that are present and
 // sanitizes the result; it returns false (leaving `s` unchanged) on bad JSON.
 std::string settingsToJson(const Settings& s);
+// Only the fields of `s` that differ from `base` (what NVS stores, so new
+// firmware defaults still apply to untouched settings).
+std::string settingsDiffToJson(const Settings& s, const Settings& base);
 bool settingsFromJson(const char* json, size_t len, Settings& s, std::string* error = nullptr);
 
 }  // namespace radar
