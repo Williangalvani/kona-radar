@@ -1,26 +1,34 @@
 # Kona Radar
 
-A stand-alone, glance-then-look-up flight tracker for the **Waveshare
-ESP32-S3-Touch-AMOLED-1.43**. It shows live aircraft around Kona International
-Airport (KOA) on a round radar scope, using free public ADS-B data over Wi-Fi.
-It is designed to sit on a balcony with a view of the airport: by default the
-top of the screen points the way you face when you look toward KOA.
+A glance-then-look-up flight tracker for the **Waveshare
+ESP32-S3-Touch-AMOLED-1.43**. It hangs on a balcony with a view of Kona
+International Airport (KOA) and shows nearby aircraft, using free public ADS-B
+data over Wi-Fi. The scope is centered on **you**, and the top of the screen
+is the direction you face, so an aircraft drawn up and to the right is up and
+to the right when you look out. When an arrival is about a minute from
+landing, the screen says which way to look.
 
-| View-aligned (default, top = 281°) | North-up | Details card | Settings |
+| Radar (view up, 10 NM) | 5 NM, departure selected | Aircraft detail | Look-up alert |
 | --- | --- | --- | --- |
-| ![radar](docs/img/radar_view_aligned.png) | ![north up](docs/img/radar_north_up.png) | ![details](docs/img/details.png) | ![settings](docs/img/settings.png) |
+| ![radar](docs/img/06_radar_view_aligned.png) | ![zoom](docs/img/07_radar_zoom_5nm.png) | ![detail](docs/img/08_aircraft_detail.png) | ![alert](docs/img/09_look_up_alert.png) |
+| **Phone setup** | **Night** | **Quiet idle** | **Balcony alignment** |
+| ![setup](docs/img/02_wifi_setup_qr.png) | ![night](docs/img/10_night_mode.png) | ![idle](docs/img/11_idle_dim.png) | ![alignment](docs/img/12_balcony_alignment.png) |
 
-*(Screenshots come from the host simulator, which runs the real UI code. The
-gray corners are outside the round panel.)*
+*These are screenshots from the host simulator, which runs the real UI code
+with the design's example traffic around a made-up observer. The gray
+corners are outside the round panel. The UI follows the design in
+[`docs/design/`](docs/design/DESIGN.md).*
 
 - [Hardware](#hardware)
 - [Flashing](#flashing)
 - [First-time Wi-Fi setup](#first-time-wi-fi-setup)
+- [Your location (and keeping it private)](#your-location-and-keeping-it-private)
 - [Using the radar](#using-the-radar)
+- [Flight cues](#flight-cues)
 - [Data source](#data-source)
 - [Configuration](#configuration)
 - [AMOLED burn-in protection](#amoled-burn-in-protection)
-- [Code layout and restyling the UI](#code-layout-and-restyling-the-ui)
+- [Code layout and the UI design](#code-layout-and-the-ui-design)
 - [Tests and simulator](#tests-and-simulator)
 - [What to check first on real hardware](#what-to-check-first-on-real-hardware)
 - [Licenses and credits](#licenses-and-credits)
@@ -37,11 +45,13 @@ official demo package (`ESP32-S3-AMOLED-1.43-Demo`, `Arduino/examples/07_LVGL_Te
 | 1.43" 466×466 AMOLED, QSPI | Waveshare ships this board with **either an SH8601 or a CO5300** controller. At boot the firmware reads ID register `0xDA` over bit-banged SPI, as Waveshare's demo does. `0x86` means SH8601; anything else means CO5300, which needs a 6-pixel column offset. Pins: CS 9, SCLK 10, D0–D3 11–14, RST 21, AMOLED_EN 42. The pixel clock is 40 MHz. The driver is Espressif's `esp_lcd_sh8601` (vendored), which handles both controllers. |
 | FT3168 capacitive touch, I2C `0x38` | Polled over the shared I2C bus on SDA 47 / SCL 48. The board does not wire up the touch interrupt. |
 | QMI8658 IMU, PCF85063 RTC, ETA6098 PMIC, microSD | Not used yet. The clock comes from NTP. |
-| BOOT button (GPIO 0) | Hold it for 5 s while running to open Wi-Fi setup. |
+| BOOT button (GPIO 0) | Hold it for 5 s while running to reset Wi-Fi, the same as holding the screen. |
 
 Graphics use **LVGL 8.4** with two 466×32-line DMA buffers in internal RAM.
 The controller has no rotation hardware, so rotation is done in software in the
-flush callback. The radar background is pre-rendered into an 868 KB PSRAM layer.
+flush callback. The radar background (coastline, rings, runway, view cone) is
+pre-rendered into a 434 KB PSRAM layer and redrawn only when the range or
+orientation changes. Text uses IBM Plex fonts converted to 4-bit LVGL bitmaps.
 
 ## Flashing
 
@@ -67,95 +77,206 @@ in `boards/`. The serial log goes over the USB port (USB CDC on boot).
 
 Nothing to install: it only takes a phone camera.
 
-1. **Plug the radar in.** If no network has been set up yet, it shows
-   **"Wi-Fi setup"** and a QR code.
+| 1. Scan | 2. Joining | 3. Checking for flight data | 4. Done |
+| --- | --- | --- | --- |
+| ![qr](docs/img/02_wifi_setup_qr.png) | ![joining](docs/img/03b_wifi_checking_internet.png) | ![failed](docs/img/05b_wifi_no_internet.png) | ![connected](docs/img/04_wifi_connected.png) |
 
-   ![setup](docs/img/setup_join.png)
+1. **Plug the radar in.** With no network saved it shows **Set up with your
+   phone** and a QR code.
+2. **Point your phone's camera at the code** and tap *Join "Kona-Radar-XXXX"*.
+   On Android, if the camera ignores it, go to Settings › Wi-Fi and tap the QR
+   icon. The network name and password (`look-up-NNNN`) are also printed below
+   the code for typing by hand. The screen then shows **Phone joined**.
+3. **The sign-in page opens on the phone by itself.** If it doesn't, open
+   `http://192.168.4.1/` (shown on the screen as *No page?*).
+4. **Pick your home network and type its password.** Optionally paste your
+   balcony's location too (see the next section); you can also skip it and
+   add it later.
+5. **Wait about 10–30 seconds.** The radar first joins the network
+   (**Joining Wi-Fi**), then checks that flight data actually downloads
+   (**Going online**). Both the phone and the radar report the result:
+   - **You're connected**: tap **OPEN RADAR** or wait a few seconds.
+   - **Couldn't connect**: wrong password, the network wasn't found (it must
+     be 2.4 GHz; the ESP32 has no 5 GHz radio), or the router refused the
+     connection. Fix it on the phone, which is still connected, or tap **TRY AGAIN**.
+   - **No internet**: the Wi-Fi password was right and is saved, but no
+     flight data came through. **TRY AGAIN** checks again.
+6. Your phone goes back to its usual Wi-Fi. The radar remembers the network
+   and reconnects by itself after power cuts or router restarts.
 
-2. **Open your phone's camera and point it at the code.** Tap the notification
-   that says *Join "KonaRadar-XXXX"*. On Android, if the camera ignores it, go
-   to Settings › Wi-Fi and tap the QR icon. The screen also shows the network
-   name and password in case you prefer to type them.
-3. **A "Kona Radar" page opens on your phone by itself.** If it doesn't, the
-   radar now shows a second QR code: scan it, or open `http://192.168.4.1/`.
+**Changing networks later: hold anywhere on the screen for 5 seconds**, or
+hold the BOOT button. A ring fills up while you hold, and letting go cancels.
+This forgets *only* the Wi-Fi; your location, view and display settings stay.
+If the saved network can't be reached after power-on, the radar shows **Wi-Fi
+not found**, keeps retrying in the background, and offers **SET UP WI-FI**.
 
-   ![portal](docs/img/setup_portal.png)
+![hold to reset](docs/img/14_hold_to_reset_wifi.png)
 
-4. **Tap your home network, type its password, and tap Connect.**
-5. **Wait about 10–20 seconds.** The radar tests the password before saving
-   it. If the password is wrong, both the phone and the radar say so and you
-   can try again. If the network isn't found, it must be a 2.4 GHz network
-   (the ESP32 has no 5 GHz radio).
+### How this matches the design
 
-   ![wrong password](docs/img/setup_wrong_password.png)
+The design (`docs/design/DESIGN.md`, *First-time connection*) chose **QR →
+temporary setup Wi-Fi → captive portal**, with no app or account. The
+firmware was already built on that flow, so the two are reconciled rather
+than replaced. To match the design:
 
-6. When the radar shows **Connected ✓**, you're done. Your phone returns to
-   its usual Wi-Fi by itself. The radar remembers the network and reconnects
-   automatically after power cuts or router restarts.
+- **Setup network.** It is now called `Kona-Radar-XXXX`, using the last two
+  bytes of the MAC. Its password is `look-up-NNNN`, picked at random on first
+  boot and kept in NVS, so a printed or remembered QR code stays valid. It
+  used to be derived from the MAC address, which anyone could recompute.
+- **Separate internet check.** Joining the Wi-Fi and getting flight data are
+  separate steps. *Connected* is only shown after the first successful
+  download, and "no internet" is reported apart from "wrong password", as the
+  design asks.
+- **Failure reasons.** Wrong password, network not found and router refused
+  each get their own wording, reusing the failure layout.
+- **5-second reset.** The **5 s hold anywhere** replaces the previous
+  long-press settings menu and its Change Wi-Fi button. It forgets only the
+  Wi-Fi.
+- **Location step.** The portal asks for the observer location and facing
+  bearing, as the design's phone flow does, but the step is optional so that
+  joining Wi-Fi never gets stuck on a coordinates question.
 
-**Changing the network later.** Long-press the radar (about 1 second) to open
-Settings, then tap **Change Wi-Fi** › **Set up**. Or hold the **BOOT** button
-for 5 seconds. The old network stays saved until a new one works, and
-**Cancel** on the setup screen goes back to it. If the saved network can't be
-reached after boot, the radar shows **No Wi-Fi**. It keeps retrying in the
-background and also offers a **Set up Wi-Fi** button.
+The design mentions BLE as a possible optional second transport. It isn't
+implemented, for the reasons in the next section.
 
 ### Why a captive portal with a QR code
 
-I compared the options for "as easy as possible for a non-technical person":
-
 | Option | What the person has to do | Problem |
 | --- | --- | --- |
-| **SoftAP captive portal + Wi-Fi QR code (chosen)** | Point the camera, tap join, pick the network, type the password | None that matters. Works on any phone with no app, using the camera and captive-portal page every phone already has. |
+| **SoftAP captive portal + Wi-Fi QR code (chosen, and the design's choice)** | Point the camera, tap join, pick the network, type the password | None that matters. It works on any phone with no app, using the camera and the captive-portal page every phone already has. |
 | Espressif BLE provisioning (ESP BLE Prov app + QR) | Install "ESP BLE Provisioning" from the app store, scan, pick the network | Needs a niche developer app; adds the BLE stack (~300 KB flash, RAM) |
 | Improv Wi-Fi over BLE | Open a web page in Chrome, connect over Web Bluetooth | **Web Bluetooth doesn't work on iPhone or iPad** (Safari has none, and every iOS browser uses Safari's engine) |
 | Improv Wi-Fi over serial | Plug into a computer and use a web flasher page | Needs a computer and a Chromium browser; no good for re-setup on a balcony |
 
-The chosen flow is built to avoid the usual captive-portal problems:
+The chosen flow avoids the usual captive-portal problems:
 - The setup network has a password, shown on screen and in the QR code, so
   neighbors can't join it.
 - The radar answers every OS connectivity check (Android, iOS/macOS, Windows,
   Firefox) and advertises the portal through DHCP, so the page pops up by
-  itself.
-- A second QR code covers phones that don't open the page.
-- Credentials are tested before being saved, and errors are shown in plain
-  language (wrong password, network not found or 5 GHz).
-- The access point stays up 10 s after success so the phone sees the result.
+  itself. The IP address is on screen as a fallback.
+- The password is tested before it is saved, and errors are in plain language.
+- The access point stays up for 10 s after success so the phone sees the result.
+
+## Your location (and keeping it private)
+
+The firmware ships with a **neutral default: the observer is KOA itself**.
+In that state the radar is centered on the airport, the top of the screen is
+north, the footer says **SET YOUR LOCATION ON PHONE**, and the alignment
+screen says **Set your location**. Nothing about where the radar actually
+hangs is compiled into the public firmware.
+
+| Location not set | Alignment, location not set |
+| --- | --- |
+| ![unset](docs/img/15_radar_20nm_observer_not_set.png) | ![unset alignment](docs/img/15b_alignment_location_not_set.png) |
+
+There are three ways to give the radar its real location. None of them
+involves committing it to the repository:
+
+1. **During Wi-Fi setup**, in the optional *Your balcony* step of the portal.
+2. **Any time later** on the settings page at `http://kona-radar.local/`. On
+   the radar, tap the title to open the alignment screen, then tap *TAP HERE
+   TO EDIT ON PHONE* for a QR code with the page's address.
+3. **At build time**, for your own builds only:
+
+   ```bash
+   cp include/config.local.example.h include/config.local.h   # gitignored
+   # edit RADAR_OBSERVER_LAT / RADAR_OBSERVER_LON / RADAR_VIEW_BEARING_DEG
+   pio run -t upload
+   ```
+
+   `include/config.h` includes `config.local.h` first when it exists, and any
+   macro there overrides the factory default. `.gitignore` also excludes
+   `*.local.json`.
+
+Values set from the phone are stored in NVS on the device and survive
+firmware updates. Restoring factory settings goes back to the build's
+defaults.
+
+To get the coordinates, long-press the spot in Google or Apple Maps and copy
+the two numbers. For the facing direction, keep **toward the airport** (the
+default) or enter a measured compass bearing in degrees true. The alignment
+screen shows the result: **Face the airport · 260°** when the airport is
+straight ahead, otherwise how far left or right of your view it is.
+
+**About the design files.** The original mockups were drawn around a real
+balcony. The copy in `docs/design/` has been re-rendered around a made-up
+placeholder observer (19.7470, −155.9940, about 3 NM east of KOA, facing it at
+260°). The coordinates are not the only thing replaced: in a radar picture
+the airport's position relative to "YOU" gives the observer away, so the
+screens themselves were re-rendered too. The simulator uses the same
+placeholder.
 
 ## Using the radar
 
-- **The scope.** It is centered on KOA (the **+** marked "KOA"). Your balcony
-  is the **◎ YOU** marker. Range rings are labeled in nautical miles, and
-  coastlines of the islands are drawn in green. Other airports are small
-  squares (ITO, MUE, OGG, HNL, …).
-- **Aircraft.**
-  - Each aircraft is a dot that flares as the sweep passes over it.
-  - The line ahead of the dot shows where it will be in one minute. The dotted
-    trail shows where it has been.
-  - Labels show the callsign and altitude, with ▲/▼ when it is climbing or
-    descending.
-  - Hollow squares are aircraft on the ground. Red means an emergency squawk,
-    and amber is the aircraft you selected.
-  - Positions are dead-reckoned between downloads, so movement stays smooth.
-- **Header.** The clock (Hawaii time), the number of aircraft, and warnings
-  such as "Data 2 min old" or "Wi-Fi lost, reconnecting".
-- **Tap an aircraft** for details:
-  - **Look W 287° ▲ 9° up**: which way to turn and how high above the horizon
-    to look from the balcony. It accounts for Earth curvature and atmospheric
-    refraction.
-  - Distance from you (NM and km) and from KOA.
-  - Altitude with vertical rate, speed in knots and mph, and track.
-  - Squawk, registration, airline, and aircraft type.
+| Where | Gesture | What happens |
+| --- | --- | --- |
+| Range text (`· 10 NM`, right half of the header) | tap | 5 → 10 → 20 NM, wrapping |
+| Empty radar | swipe left / right | zoom out / in |
+| Title or `VIEW 260°T` (left half of the header) | tap | Balcony alignment: bearing, distance to the airport, **NORTH UP / VIEW UP** switch, and a QR code for the phone settings |
+| Aircraft icon or label | tap | select it; its summary appears in the bottom dock |
+| Selected aircraft, or the dock | tap | aircraft detail |
+| Overlapping aircraft | tap again | cycles through the cluster instead of guessing |
+| Empty sky | tap | back to the automatic focus (the next likely arrival) |
+| Detail / alignment | tap ‹ or swipe right | back to the radar |
+| Look-up alert | tap | dismiss and open that aircraft's detail |
+| Empty radar | swipe up | day ⇄ night colors (until the next scheduled change) |
+| Empty radar | swipe down | quiet idle screen; tap to wake |
+| Anywhere | hold 5 s | reset Wi-Fi only (see above) |
 
-  Tap again to close.
-- **− / +** change the range: 5, 10, 25, 50, 100, or 200 NM. The radar
-  remembers your choice.
-- **Long-press the scope** for Settings:
-  - brightness
-  - view: switch between facing KOA and north-up
-  - rotate screen (for mounting)
-  - **Phone settings**, which shows a QR code for the settings page
-  - **Change Wi-Fi**
+On the scope:
+- Rings are at a third, two thirds and the full range, measured from you.
+- Ticks mark every 15°, and **N** marks true north. The cyan triangle at the
+  top and the shaded cone are your view.
+- The runway is drawn from the FAA threshold coordinates, with its numbers.
+- Aircraft are drawn as silhouettes pointing along their track, with three
+  trail dots showing where they came from.
+  - Cyan is traffic, sage is a departure (↑ after the name), and amber is the
+    focused aircraft, which gets a double ring.
+  - Helicopters have their own icon.
+  - Coral means an emergency squawk. Grey means stale data.
+- A dashed amber line joins a likely arrival to its runway threshold.
+- The header shows the aircraft count in range, and **+N OUTSIDE** for
+  aircraft just beyond the outer ring.
+- The footer shows the data source and freshness, for example `ADSB.FI ·
+  LIVE`, `STALE 45s` or `WI-FI LOST · RECONNECTING`.
+
+The bottom dock always says what matters most right now:
+- `APPROACHING KOA · ~3 MIN · RIGHT 77°` for the next likely arrival,
+- `DEPARTING SWA250 ↑ 2,300 FT` for a selected departure,
+- otherwise altitude and speed.
+
+The aircraft detail screen adds operator and type, a role tag (`LIKELY
+ARRIVAL · RWY 17`, `HELICOPTER`, `STALE`…), altitude, ground speed, vertical
+rate, track, squawk, and where to look: `RIGHT 77° · ~3 MIN` and its
+elevation above the horizon (`2° UP`).
+
+## Flight cues
+
+The cues are heuristics computed in `lib/radar_core/src/traffic.cpp`. They are
+not ATC data:
+
+- **Likely arrival.** All of these must hold:
+  - the track is within 25° of a runway's landing direction, before the
+    threshold and up to 15 NM out;
+  - it is close to the extended centerline, with tolerance growing with
+    distance;
+  - altitude is on a plausible approach profile, and the aircraft is
+    descending or already low;
+  - it is getting closer between reports.
+
+  The ETA is the distance to the threshold divided by ground speed, shown
+  with `~`.
+- **Likely departure.** Climbing at 300 ft/min or more, below 8,000 ft, past
+  the far end of the runway, and close to the centerline.
+- **Helicopter.** Category A7 or a known helicopter type.
+- **Stale data.** Colors are muted after 30 s without a position. ETAs and
+  alerts are dropped after 60 s. The aircraft is removed after 180 s.
+- **Look-up alert.** Shown once per aircraft when a likely arrival in range
+  is 75 s or less from the threshold. It wakes the screen and can be turned
+  off on the settings page. The direction is relative to the way you face,
+  for example `LOOK RIGHT · 47° from your balcony view`, with the true
+  bearing underneath (`NW 307°T`). There is no compass on the board, so this
+  relies on the facing bearing being right.
 
 ## Data source
 
@@ -170,15 +291,15 @@ aggregators. No API key is used.
 | OpenSky Network | Not used | 400 API credits/day anonymous; OAuth client needed for more; non-commercial research terms | Credit budget too small for a 5 s refresh |
 
 **How the firmware uses them:**
-- It requests a circle 1.3× the displayed range (capped at 250 NM) every 5 s
-  by default, never faster than every 2 s.
+- Every 5 s by default (never faster than every 2 s), it requests a circle
+  around the observer of twice the displayed range, at least 25 NM. That
+  covers the "+N outside" count and arrivals still well out on final.
 - It runs in a background task on core 0 over HTTPS (with the built-in CA
   bundle) and reuses the connection between requests.
 - On HTTP 429 it waits 60 s. On other errors it backs off exponentially, up
   to 60 s.
 - After 3 failures in a row it switches to the other source, and drifts back
   to the preferred one later.
-- Aircraft not reported for 60 s are removed.
 
 **Coverage near KOA is the main limitation, not the firmware.** The
 aggregators depend on volunteer receivers, and the Big Island's west side has
@@ -186,198 +307,216 @@ few. In the snapshot used for the test fixtures:
 - adsb.fi had 37 aircraft within 150 NM of KOA, but only **2 within 25 NM**.
 - adsb.lol had **none within 50 NM**.
 
-Most aircraft were around Maui and Oahu. Jets at altitude near Kona show up;
-low aircraft on approach, helicopters, and ground traffic often don't. A cheap
-local feeder (an RTL-SDR dongle on a Raspberry Pi, feeding adsb.fi or
-adsb.lol) anywhere around Kona would improve coverage for everyone.
+Jets at altitude near Kona show up. Low aircraft on approach, helicopters, and
+ground traffic often don't, which also limits the arrival cues. A cheap local
+feeder (an RTL-SDR dongle on a Raspberry Pi, feeding adsb.fi or adsb.lol)
+anywhere around Kona would improve coverage for everyone.
 
 ## Configuration
 
 ### From a phone, no reflashing
 
-When the radar is online, open **`http://kona-radar.local/`** on any phone or
+When the radar is online, open **`http://kona-radar.local/`** on a phone or
 computer on the same Wi-Fi. If `.local` names don't work on your device, use
-the QR code under Settings › **Phone settings**, which shows the IP address.
+the QR code on the alignment screen, which also shows the IP address.
 
 | Setting | Default |
 | --- | --- |
-| Balcony location (paste "lat, lon", e.g. from Google Maps) | 19.700000, -156.000000 |
-| Height above sea level | 100 ft |
-| Radar center and its label | 19.7388, -156.0456, "KOA" |
-| Range | 25 NM |
-| Top of the screen points | toward the center from your balcony, a fixed compass bearing, or north (default: fixed 281°) |
+| Balcony location (paste "lat, lon") and height | not set (= the airport), 50 ft |
+| Top of the screen | the direction you face (view up); or north |
+| You face | toward the airport (auto); or a compass bearing |
+| Range | 10 NM (5 / 10 / 20) |
 | Screen mounting rotation | 0 |
-| Brightness, idle dim delay and level, wake distance, night hours and level | see below |
-| Preferred data source, refresh interval | adsb.fi, 5 s |
+| Look-up alerts | on |
+| Brightness | 80% |
+| Quiet screen after / its brightness | 90 s / 40% |
+| Screen off after quiet for | 900 s |
+| Wake when a plane is within | 0 = only for arrivals |
+| Night colors | by the hours 19:00–06:00, night brightness 12% (or never / always) |
+| Airport and label, data source, refresh | KOA 19.738765, −156.045631; adsb.fi; 5 s |
 
 Settings are stored in NVS flash and survive power cuts and firmware updates.
 Only values you change are stored, so a new firmware with different defaults
-still updates everything you never touched. **Restore factory settings** on
-the page clears your changes. The page has no password: anyone on your home
-Wi-Fi can change settings, which is normal for this kind of gadget.
-
-### Observer and view-aligned rotation
-
-The scope stays **centered on KOA**. The observer (balcony) is configured
-separately: the default 19.700000, -156.000000 is a few km from KOA. From there
-KOA lies at a bearing of 281°, so the default **view bearing is 281°**.
-
-The top of the screen is the direction you face when you look at the
-airport, and the **YOU** marker sits straight below the center. An aircraft
-drawn up and to the left of KOA is up and to the left of the airport in real
-life too. Bearings and elevations in the details card are always computed
-from the observer.
-
-The *view* setting has three modes: `281` (or any bearing), `-1` = auto
-(always face from the balcony toward the center, recomputed if you move
-either point), or `0` = classic north-up. The Settings menu on the device
-toggles between north-up and your aligned bearing.
+still updates everything you never touched. **Restore factory settings**
+clears your changes and keeps the Wi-Fi. The page has no password: anyone on
+your home Wi-Fi can change settings, which is normal for this kind of gadget.
 
 ### Build-time defaults
 
-All factory defaults live in [`include/config.h`](include/config.h) and can
-be overridden in `platformio.ini` without editing the file, e.g.
-`build_flags = ... -DRADAR_DEFAULT_RANGE_NM=50`.
+All factory defaults are in [`include/config.h`](include/config.h). Override
+them in the gitignored `include/config.local.h` (see above) or with build
+flags in `platformio.ini`, for example `-DRADAR_DEFAULT_RANGE_NM=20`.
 
 | Macro | Default | Meaning |
 | --- | --- | --- |
-| `RADAR_CENTER_LAT` / `_LON` / `_NAME` | 19.7388 / -156.0456 / "KOA" | Scope center |
-| `RADAR_OBSERVER_LAT` / `_LON` / `_ALT_FT` | 19.700000 / -156.000000 / 100 | Balcony |
-| `RADAR_VIEW_BEARING_DEG` | 281 | Bearing at the top (−1 auto, 0 north-up) |
+| `RADAR_CENTER_LAT` / `_LON` / `_NAME` | 19.738765 / −156.045631 / "KOA" | Airport |
+| `RADAR_OBSERVER_LAT` / `_LON` / `_ALT_FT` | the airport / 50 | Where the radar hangs (the airport = not set) |
+| `RADAR_VIEW_BEARING_DEG` | −1 | Facing bearing, degrees true (−1 = toward the airport) |
+| `RADAR_NORTH_UP` | 0 | 1 = north at the top instead of the view |
 | `RADAR_SCREEN_ROTATION` | 0 | Mounting, quarter turns clockwise |
-| `RADAR_DEFAULT_RANGE_NM` | 25 | Starting range |
-| `RADAR_RANGE_STEPS_NM` | {5,10,25,50,100,200} | Steps for − / + |
-| `RADAR_REFRESH_INTERVAL_S` | 5 | Seconds between downloads (min 2) |
-| `RADAR_PRIMARY_SOURCE` | 0 | 0 adsb.fi, 1 adsb.lol |
-| `RADAR_STALE_AFTER_S` | 60 | Drop silent aircraft after |
+| `RADAR_DEFAULT_RANGE_NM` / `RADAR_RANGE_STEPS_NM` | 10 / {5, 10, 20} | Range |
+| `RADAR_REFRESH_INTERVAL_S` / `RADAR_PRIMARY_SOURCE` | 5 / 0 | Download interval; 0 adsb.fi, 1 adsb.lol |
+| `RADAR_STALE_MUTE_S` / `_NO_ETA_S` / `_AFTER_S` | 30 / 60 / 180 | Stale data handling |
+| `RADAR_ALERT_ETA_S` / `RADAR_IMMINENT_ETA_S` | 75 / 240 | Look-up alert; arrivals that keep the screen awake |
 | `RADAR_DEFAULT_BRIGHTNESS` | 80 | Percent |
-| `RADAR_IDLE_DIM_S` / `RADAR_IDLE_BRIGHTNESS` | 300 / 20 | Idle dimming |
-| `RADAR_WAKE_RANGE_NM` | 6 | Brighten when an aircraft is this close to you |
-| `RADAR_NIGHT_START_H` / `_END_H` / `_BRIGHTNESS` | 22 / 6 / 8 | Night cap (local time) |
-| `RADAR_PIXEL_SHIFT_S` / `_MAX` | 120 / 3 | Burn-in pixel shift |
-| `RADAR_SWEEP_PERIOD_S` / `RADAR_SWEEP_FPS` | 6 / 25 | Sweep speed and frame rate |
-| `RADAR_TIMEZONE` | "HST10" | POSIX TZ for the clock |
+| `RADAR_IDLE_DIM_S` / `RADAR_IDLE_BRIGHTNESS` / `RADAR_BLACKOUT_S` | 90 / 40 / 900 | Quiet screen and screen-off |
+| `RADAR_WAKE_RANGE_NM` | 0 | Also wake for any aircraft this close (0 = off) |
+| `RADAR_NIGHT_MODE` / `_START_H` / `_END_H` / `RADAR_NIGHT_BRIGHTNESS` | 0 / 19 / 6 / 12 | Night colors (0 by hours, 1 never, 2 always) |
+| `RADAR_PIXEL_SHIFT_S` / `_MAX` | 60 / 2 | Burn-in pixel shift |
+| `RADAR_AP_PREFIX` / `RADAR_AP_PASS_PREFIX` / `RADAR_HOSTNAME` | "Kona-Radar" / "look-up-" / "kona-radar" | Setup network and mDNS name |
+| `RADAR_ONLINE_CHECK_S` / `RADAR_RESET_HOLD_S` | 30 / 5 | Setup internet check; hold time for the Wi-Fi reset |
+| `RADAR_TIMEZONE` | "HST10" | POSIX TZ for the night schedule |
 | `RADAR_PANEL_FORCE` | 0 | 0 auto-detect, 1 SH8601, 2 CO5300 |
-| `RADAR_AP_PREFIX` / `RADAR_HOSTNAME` | "KonaRadar" / "kona-radar" | Setup network / mDNS name |
 | `RADAR_LOG_FPS` | 0 | 1 = log display throughput and memory every 5 s |
 
 ## AMOLED burn-in protection
 
-OLED pixels age with use, and static bright elements age fastest. The
-firmware takes these measures:
-- **Black background everywhere.** The moving sweep means no area stays
-  equally lit.
-- **Idle dimming.** After 5 minutes without a touch the screen fades to 20%.
-  The first touch on a dimmed screen only wakes it, so you can't change
-  anything by accident.
-- **Wake on nearby traffic.** An airborne aircraft within 6 NM of the balcony
-  brings full brightness back. That is the "glance, then look up" moment.
-- **Night cap.** From 22:00 to 06:00 local time brightness is capped at 8%.
-- **Pixel shift.** Every 2 minutes the whole scope and header move by 3 px in
-  a 9-position pattern, so rings, labels, and ticks never sit on the same
-  pixels for long.
-- Menus and details close by themselves when the screen dims.
+OLED pixels age with use, and static bright elements age fastest. These
+measures reduce aging but can't prevent it entirely:
+- **True black everywhere.** Land and ocean are unlit, the coastline is a
+  thin dim line, and there is no static lit panel apart from the small dock.
+- **Quiet idle.** After 90 s without a touch the radar is replaced by a dim
+  summary: the aircraft count and the next arrival. Its position changes
+  every minute. This doesn't happen while an arrival is within 4 minutes,
+  and the look-up alert wakes it.
+- **Screen off.** After 15 more minutes the panel turns off. The first touch
+  only turns it back on.
+- **Night.** From 19:00 to 06:00 colors switch to a warm low-luminance
+  palette, and brightness is capped at 12%.
+- **Pixel shift.** Every minute the whole scene moves by up to 2 px in a
+  9-position pattern. The design keeps 2 px of margin for this.
 
-All of these can be changed on the settings page or in `config.h`.
+The QR setup screen is the only white area. It is shown only during setup.
 
-## Code layout and restyling the UI
+## Code layout and the UI design
 
 ```
-include/config.h          build-time defaults (see above)
+docs/design/              the UI design: DESIGN.md (spec), screens/, device/, contact sheet,
+                          render.py (pixel reference), verify.py, fonts (IBM Plex, OFL)
+include/config.h          build-time defaults; include/config.local.h (gitignored) overrides
 include/lv_conf.h         LVGL configuration
 lib/radar_core/           portable C++ with no Arduino dependency (tested on the host)
   adsb_parser.*           readsb / ADSBx-v2 JSON (adsb.fi, adsb.lol) -> Aircraft
-  geo.*                   haversine, azimuthal-equidistant scope projection with
-                          view rotation, look angles (curvature + refraction)
+  geo.*                   haversine, observer-centered projection with view rotation, look angles
   tracker.*               merge downloads, dead reckoning, trails, expiry
+  traffic.*               per-aircraft distance/direction, arrival/departure/ETA cues
   settings.*              Settings struct, validation, JSON (web page + NVS)
-  format.*                altitude/speed text, airline and aircraft-type names
-  places.*, coastline_data.cpp   airports and simplified island coastlines
+  format.*                text: altitudes, airline/type names, "RIGHT 42°", "~3 MIN", "NW 305°T"
+  places.*, coastline_data.cpp   airports with runway thresholds, simplified coastlines
 src/hal/                  board pins, AMOLED panel (SH8601/CO5300), FT3168, LVGL port
 src/net/                  Wi-Fi manager + setup portal, ADS-B downloader, web pages
-src/app/settings_store.*  NVS persistence
-src/ui/                   everything you see: no Wi-Fi/HTTP/NVS/hardware code
+src/app/settings_store.*  NVS persistence (settings, Wi-Fi, setup password)
+src/ui/                   everything you see; no Wi-Fi/HTTP/NVS/hardware code
   ui_model.h              the only interface: Model (state in) + Actions (intent out)
-  theme.h                 every color, font and size
-  radar_view.*            the scope (pre-rendered background + sweep + aircraft)
-  ui.*                    screens: radar overlay, details, settings, setup
-src/sim/sim_main.cpp      host simulator rendering the UI to PNG
-src/main.cpp              app controller: wires it all together, brightness policy
-tools/gen_coastline.py    regenerates coastline_data.cpp from US Census shapefiles
+  theme.*                 day/night palettes and fonts from the design
+  fonts/                  IBM Plex as LVGL fonts (regenerate with tools/gen_fonts.sh)
+  draw.*, widgets.*       antialiased vector drawing; design-anchored text, panels, buttons
+  radar_view.*            the scope: pre-rendered layer, aircraft, trails, label placement
+  screen_radar.cpp        radar screen: header, dock, footer, taps and swipes
+  screens_setup.cpp       splash, phone QR, connecting, connected/failed
+  screens_info.cpp        detail, look-up alert, quiet idle, balcony alignment
+  ui.*                    routing between screens, gesture recognizer, 5 s hold overlay
+src/sim/sim_main.cpp      host simulator rendering the UI to PNG and checking interactions
+src/main.cpp              app controller: Wi-Fi/feed wiring, alerts, idle/night/screen-off policy
+tools/                    coastline and font generators
 ```
 
-To restyle for the upcoming design spec:
-- Colors, fonts, and sizes live in `src/ui/theme.h`.
-- Screen layout lives in `src/ui/ui.cpp`, with the layout constants at the
-  top.
-- The scope drawing lives in `src/ui/radar_view.cpp`.
-- The UI only reads `ui::Model` and calls `ui::Actions`, so a full redesign
-  doesn't touch drivers, networking, or storage.
-- The simulator shows every screen in seconds without flashing.
-- Custom fonts can be generated with LVGL's `lv_font_conv` and assigned in
-  `theme.h`.
+Text positions in the UI use the design's convention: a y coordinate is the
+top of the capital letters. `designTopOffset()` in `theme.cpp` converts it
+from each font's metrics. Coordinates in `src/ui` can therefore be copied
+straight from `docs/design/render.py`. To restyle:
+- Colors are in `src/ui/theme.cpp`, as day and night palettes.
+- Each screen's layout is in its `screens_*.cpp` file.
+- The scope drawing is in `radar_view.cpp`.
+
+The UI only reads `ui::Model` and calls `ui::Actions`, so a redesign doesn't
+touch drivers, networking or storage. To change fonts or glyph sets, edit
+`tools/gen_fonts.sh` and run it with `LV_FONT_CONV` pointing at
+[`lv_font_conv`](https://github.com/lvgl/lv_font_conv).
 
 ## Tests and simulator
 
 ```bash
-pio test -e native                                  # 19 unit tests, no hardware
-pio run -e simulator && .pio/build/simulator/program  # PNG screenshots in sim_out/
+pio test -e native                                     # 21 unit tests, no hardware
+pio run -e simulator && .pio/build/simulator/program   # screenshots in sim_out/ + interaction checks
+python3 docs/design/render.py && python3 docs/design/verify.py   # regenerate/verify the design
 ```
 
 **The unit tests cover:**
-- Parsing real captured responses from both adsb.fi and adsb.lol near KOA,
-  plus edge cases (`"alt_baro": "ground"`, missing fields, emergencies, bad
-  JSON, size limits).
+- Parsing real captured responses from adsb.fi and adsb.lol near KOA, plus
+  edge cases (`"alt_baro": "ground"`, missing fields, emergencies, bad JSON,
+  size limits).
 - Checking the projection against the distance and bearing the servers
-  themselves compute for each aircraft.
-- Balcony → KOA = a few km at 281°.
-- View-aligned projection, look angles, and screen-rotation math.
-- Tracker dead reckoning, trails, and expiry.
-- Text formatting.
-- Settings JSON with clamping and the NVS diff.
-- Coastline sanity.
+  compute.
+- The view-aligned projection, look angles and screen rotation.
+- KOA runway data.
+- Arrival, departure and helicopter cues and ETA on the design's example
+  traffic, including that cues need track history and fresh data.
+- The tracker, text formatting, settings JSON with clamping and the NVS diff,
+  and the coastline.
 
-**The simulator:**
-- Runs the real `src/ui` code on LVGL with the same 32-line partial buffers
-  as the device.
-- Feeds it canned traffic plus the captured adsb.fi response.
-- Taps aircraft and buttons and long-presses for settings, checking the
-  results.
-- Writes a screenshot of every screen.
+**The simulator** runs the real `src/ui` code on LVGL with the device's
+32-line partial buffers. It plays the design's example traffic, as a minute
+of 10-second reports so trails and cues build up, around the placeholder
+observer. It also plays the captured adsb.fi response. It writes a PNG of
+every design screen and its variants (setup network joined, checking
+internet, no internet, Wi-Fi not found, phone settings QR, hold overlay,
+location not set, stale feed, pixel shift). It then checks the touch model
+through the same gesture recognizer the device uses:
+- the range text and swipes;
+- selecting aircraft, and opening detail from the selection and from the dock;
+- the back chevron and right swipe;
+- night and idle swipes, and tap to wake;
+- dismissing the alert;
+- the setup buttons;
+- the alignment switch;
+- a 5 s hold that resets Wi-Fi, and an early release that doesn't.
+
+Compare its output with `docs/design/screens/`.
 
 ## What to check first on real hardware
 
-These could not be verified without the board. Everything else (build,
-parsing, geo math, UI rendering, and interaction logic) was checked on the
-host.
+The following haven't been tested on the board. The build, parsing, geo math,
+traffic cues, UI rendering and interaction logic were all checked on the host.
 
 1. **Display comes up.** The serial log prints `panel SH8601 (id 0x86)` or
    `panel CO5300 (id 0x..)`.
    - If the picture is shifted or has a stripe at one edge, force the other
      controller with `-DRADAR_PANEL_FORCE=1` (SH8601) or `=2` (CO5300).
-   - If the picture flickers or tears, lower the pixel clock with
+   - If it flickers or tears, lower the pixel clock with
      `-DRADAR_PANEL_PCLK_HZ=20000000`.
-2. **Touch lines up.** Tap a blip and check that its details open, and that
-   − and + change the range. If the picture is sideways for your mounting,
-   use Settings › **Rotate screen**. Touch rotates with the picture.
-3. **Wi-Fi setup on your phone.** Check that the camera QR joins the network
-   and the page pops up by itself. On an iPhone, confirm that the "Kona
-   Radar" sheet appears.
+2. **Touch and gestures.** Check these:
+   - tapping a blip selects it, and a second tap opens the detail;
+   - tapping the range text changes the range;
+   - swipes work;
+   - a 5 s hold shows the ring and resets Wi-Fi.
+
+   If the picture is sideways for your mounting, set *Screen mounting* on the
+   settings page. Touch rotates with the picture.
+3. **Phone setup.** Check that the camera QR joins `Kona-Radar-XXXX` and that
+   the page pops up by itself (on an iPhone, the "Kona Radar" sheet). Try a
+   wrong password once to see the failure screen. Then enter your location in
+   the optional step.
 4. **Frame rate and memory.** Build with `-DRADAR_LOG_FPS=1` and watch the
-   log. Expect about 2 million pixels/s with free internal heap staying above
-   ~40 KB. If the sweep stutters, lower `RADAR_SWEEP_FPS` or the
-   `sweepTrailDeg` value in `theme.h`.
-5. **Coverage.** Compare against an app like Flightradar24 from the balcony.
-   Gaps are almost always the aggregator's receiver coverage (see
+   log. Expect well under one full frame of pixels per second when nothing
+   moves, and free internal heap staying above ~40 KB.
+5. **Direction cues.** Once the location is set, open the alignment screen
+   and check that the bearing and "AHEAD/LEFT/RIGHT" match what you see from
+   the balcony. Then compare a real arrival's **LOOK RIGHT/LEFT** with where
+   it actually appears.
+6. **Coverage.** Compare against an app like Flightradar24 from the balcony.
+   Gaps are almost always the aggregators' receiver coverage (see
    [Data source](#data-source)).
 
 ## Licenses and credits
 
 - Aircraft data: [adsb.fi](https://adsb.fi) (personal non-commercial use,
   attribution) and [adsb.lol](https://adsb.lol) (ODbL 1.0).
+- UI fonts: [IBM Plex](https://github.com/IBM/plex) Sans Condensed and Mono,
+  SIL Open Font License 1.1 (`docs/design/assets/OFL.txt`).
 - `src/hal/esp_lcd_sh8601.*`: Espressif Systems, Apache-2.0 (from Waveshare's
   demo package).
 - Coastlines: US Census Bureau cartographic boundary files (public domain),
   simplified by `tools/gen_coastline.py`.
-- [LVGL](https://lvgl.io) (MIT) and [ArduinoJson](https://arduinojson.org)
-  (MIT), including LVGL's bundled Montserrat font (OFL).
+- Runway thresholds: FAA airport data for KOA.
+- [LVGL](https://lvgl.io) (MIT) and [ArduinoJson](https://arduinojson.org) (MIT).
