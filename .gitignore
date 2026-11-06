@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+sim_out/
+__pycache__/

@@ -1,0 +1,10 @@
+{
+  "name": "radar_core",
+  "version": "1.0.0",
+  "description": "Hardware-independent logic for Kona Radar: ADS-B JSON parsing, great-circle math, scope projection, aircraft tracking and text formatting.",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "bblanchon/ArduinoJson": "7.4.2"
+  }
+}
