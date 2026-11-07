@@ -33,6 +33,7 @@ class AdsbClient {
  public:
   static const char* sourceName(uint8_t source);
 
+  // Starts the download task. The other methods work before it too.
   void begin();
   // Thread-safe; takes effect on the next request (and triggers one soon if
   // the radius or center changed).
@@ -46,7 +47,9 @@ class AdsbClient {
   void run();
   bool fetchOnce(uint8_t source, std::vector<radar::Aircraft>& out, FeedStatus& st);
 
-  SemaphoreHandle_t mutex_ = nullptr;
+  // Created with the object: setup() calls configure() and status() before
+  // begin().
+  SemaphoreHandle_t mutex_ = xSemaphoreCreateMutex();
   TaskHandle_t task_ = nullptr;
   // Guarded by mutex_.
   radar::LatLon center_{0, 0};

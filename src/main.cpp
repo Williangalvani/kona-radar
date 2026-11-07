@@ -69,6 +69,7 @@ uint32_t g_bootDownMs = 0;
 bool g_bootHandled = false;
 bool g_ntpStarted = false;
 bool g_radarOpened = false;
+bool g_uiOk = false;
 uint32_t g_lastExpireMs = 0;
 uint32_t g_lastStatsMs = 0;
 
@@ -384,16 +385,21 @@ void setup() {
   if (!g_touch.begin(Wire)) log_w("touch controller not found");
 
   if (!hal::lvglPortBegin(g_panel, g_touch)) {
-    log_e("display init failed");
+    log_e("display init failed; running without a screen");
   }
   log_i("panel %s (id 0x%02X)", g_panel.name(), g_panel.rawId());
   hal::lvglPortSetRotation(g_settings.screenRotation);
   hal::lvglPortSetTouchStartHook(onTouchStart);
 
-  if (!g_ui.begin(&g_actions)) log_e("UI init failed (out of PSRAM?)");
+  // Without an LVGL display there is nothing to build the UI on; Wi-Fi, the
+  // web pages and OTA still work.
+  g_uiOk = lv_disp_get_default() != nullptr && g_ui.begin(&g_actions);
+  if (!g_uiOk) log_e("UI init failed");
   fillModel(millis());
-  g_ui.update(g_model);
-  lv_timer_handler();
+  if (g_uiOk) {
+    g_ui.update(g_model);
+    lv_timer_handler();
+  }
 
   g_wifi.begin(&g_store);
   net::WebUi::Hooks hooks;
@@ -438,9 +444,11 @@ void loop() {
 
   updateDisplayPolicy(now, phaseFor(g_wifi.state(), now));
   fillModel(now);
-  updatePixelShift(now);
-  g_ui.update(g_model);
-  lv_timer_handler();
+  if (g_uiOk) {
+    updatePixelShift(now);
+    g_ui.update(g_model);
+    lv_timer_handler();
+  }
 
   if (RADAR_LOG_FPS && now - g_lastStatsMs > 5000) {
     uint32_t flushes, pixels;
