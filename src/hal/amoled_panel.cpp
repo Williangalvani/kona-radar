@@ -197,6 +197,16 @@ bool AmoledPanel::begin(size_t maxTransferBytes, FlushDoneCb onDone, void* ctx) 
   return true;
 }
 
+bool AmoledPanel::reinit() {
+  if (!panel_) return false;
+  auto* panel = static_cast<esp_lcd_panel_handle_t>(panel_);
+  if (esp_lcd_panel_reset(panel) != ESP_OK || esp_lcd_panel_init(panel) != ESP_OK) return false;
+  esp_lcd_panel_set_gap(panel, type_ == PanelType::CO5300 ? 6 : 0, 0);
+  esp_lcd_panel_disp_on_off(panel, true);
+  setBrightness(brightness_);
+  return true;
+}
+
 bool AmoledPanel::drawBitmap(int x1, int y1, int x2, int y2, const void* pixels) {
   if (!panel_) return false;
   return esp_lcd_panel_draw_bitmap(static_cast<esp_lcd_panel_handle_t>(panel_), x1, y1, x2 + 1, y2 + 1, pixels) ==
