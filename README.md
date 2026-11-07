@@ -87,8 +87,8 @@ What the firmware does about it:
   the log.
 
 Graphics use **LVGL 8.4** with two 466×32-line DMA buffers in internal RAM.
-LVGL's own heap (objects, styles, label text, about 53 KB in ~1,000 small
-blocks) is in PSRAM (`include/lv_mem_hooks.h`), so it doesn't compete with
+LVGL's own heap (objects, styles, label text: ~1,000 small blocks, 53 KB in
+the 64-bit simulator and somewhat less on the 32-bit device) is in PSRAM (`include/lv_mem_hooks.h`), so it doesn't compete with
 Wi-Fi and TLS for internal RAM.
 
 **Screen rotation** (0°, 90°, 180°, 270°) is done in software in the flush
