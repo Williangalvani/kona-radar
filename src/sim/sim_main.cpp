@@ -646,6 +646,10 @@ int main() {
   m.online = true;
   m.feedEverOk = m.feedOk = true;
   run(1500);
+  shot("06b_radar_first_view_hints");
+  run(5000);  // the first-view swipe hints fade out
+  seed(g_app.tracker, designTraffic());
+  run(1500);
   shot("06_radar_view_aligned");
   expect(g_ui.focusedAircraft() == "a1d208", "next arrival (HAL208) is focused by default");
   expect(m.summary.nextArrival >= 0 && g_app.targets[m.summary.nextArrival].cue.runway &&
@@ -703,6 +707,8 @@ int main() {
   swipe(233, 300, 233, 150);
   run(800);
   expect(m.night, "swipe up switches to night");
+  shot("10c_night_notice");
+  run(3500);  // notice and swipe hints fade out
   shot("10_night_mode");
   swipe(233, 300, 233, 150);
   run(300);
