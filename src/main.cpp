@@ -143,6 +143,12 @@ class AppActions : public ui::Actions {
     s.northUp = northUp ? 1 : 0;
     applySettings(s, 3000);
   }
+  void setScreenRotation(uint8_t quarterTurns) override {
+    radar::Settings s = g_settings;
+    s.screenRotation = quarterTurns & 3;
+    // Applied now; saved once the taps stop.
+    applySettings(s, 3000);
+  }
   void toggleNight() override {
     g_overrideScheduled = scheduledNight();
     g_nightOverride = g_night ? 0 : 1;

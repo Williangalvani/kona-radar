@@ -32,6 +32,8 @@ class Ui : public Nav {
   void notify(const std::string& title, const std::string& sub) override;
   void selectAircraft(const std::string& hex) { radar_.select(hex); }
   const std::string& focusedAircraft() const { return radar_.focus(); }
+  bool onMenu() const { return active_ == &menu_; }
+  bool onRadar() const { return active_ == &radar_; }
 
  private:
   enum class View : uint8_t { Radar, Detail, Alignment, PhoneLink, Menu, Guide };
