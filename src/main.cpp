@@ -19,6 +19,7 @@
 #include "hal/i2c_bus.h"
 #include "hal/lvgl_port.h"
 #include "hal/touch_ft3168.h"
+#include "landing_wake.h"
 #include "net/adsb_client.h"
 #include "net/web_ui.h"
 #include "net/wifi_manager.h"
@@ -60,6 +61,8 @@ bool g_overrideScheduled = false;
 std::string g_alertHex;
 uint32_t g_alertSinceMs = 0;
 std::vector<std::string> g_alerted;  // most recent last
+radar::LandingWake g_landingWake;
+std::vector<radar::LandingEta> g_landingEtas;
 float g_shownBrightness = 0;
 int g_appliedBrightness = -1;
 uint32_t g_lastBrightnessMs = 0;
@@ -78,9 +81,11 @@ constexpr uint32_t kSplashMs = 2500;
 constexpr uint32_t kAlertMaxMs = 120000;
 
 void configureFeed() {
-  // Wide enough for the "+N outside" count and for arrivals that are still
-  // well out on final.
-  const double radius = std::max<double>(25.0, g_settings.rangeNm * 2.0);
+  // Wide enough for the "+N outside" count, for arrivals that are still
+  // well out on final, and for inbound traffic the landing wake looks for
+  // (about 4.5 NM per minute at descent speeds).
+  double radius = std::max<double>(25.0, g_settings.rangeNm * 2.0);
+  if (g_settings.landingWakeMin > 0) radius = std::max<double>(radius, g_settings.landingWakeMin * 4.5 + 5.0);
   g_adsb.configure(g_settings.observer(), static_cast<uint16_t>(std::min(250.0, std::ceil(radius))), g_settings.refreshS,
                    g_settings.source);
 }
@@ -223,8 +228,18 @@ bool aircraftNearObserver() {
   return false;
 }
 
-bool imminentArrival() {
-  return g_summary.nextArrival >= 0 && g_summary.nextArrivalEtaS <= RADAR_IMMINENT_ETA_S;
+// Wakes the screen once per aircraft predicted to land within the set
+// minutes - from the quiet screen, screen-off, and a swipe-down alike. The
+// brightness stays capped by night mode.
+void updateLandingWake(uint32_t now) {
+  g_landingEtas.clear();
+  for (const radar::Target& t : g_targets)
+    if (!t.stale && t.landEtaS >= 0) g_landingEtas.push_back({t.track->ac.hex, t.landEtaS});
+  if (!g_landingWake.update(g_landingEtas, g_settings.landingWakeMin)) return;
+  if (g_idle || g_blackout || g_forcedIdle)
+    log_i("landing wake: %s predicted to land in ~%.0f min", g_landingWake.lastHex().c_str(),
+          g_summary.nextLandingEtaS / 60.0f);
+  wakeUp(now);
 }
 
 void updateAlert(uint32_t now) {
@@ -259,7 +274,9 @@ void updateDisplayPolicy(uint32_t now, ui::Phase phase) {
 
   if (phase == ui::Phase::Running) {
     updateAlert(now);
-    const bool keepAwake = !g_alertHex.empty() || (!g_forcedIdle && (imminentArrival() || aircraftNearObserver()));
+    updateLandingWake(now);
+    const bool keepAwake =
+        !g_alertHex.empty() || (!g_forcedIdle && (g_landingWake.pending() || aircraftNearObserver()));
     if (keepAwake && !g_forcedIdle) g_lastActivityMs = now;
     const uint32_t quietMs = now - g_lastActivityMs;
     const bool autoIdle = g_settings.idleDimS > 0 && quietMs > g_settings.idleDimS * 1000UL;

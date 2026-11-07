@@ -36,6 +36,7 @@ struct Target {
   bool stale = false;      // older than RADAR_STALE_MUTE_S: drawn muted
   bool inRange = false;    // inside the outer ring
   FlightCue cue;
+  float landEtaS = -1;     // predicted seconds to landing (final or inbound), else -1
 };
 
 struct TrafficSummary {
@@ -43,6 +44,8 @@ struct TrafficSummary {
   int outside = 0;          // airborne targets beyond it (up to twice the range)
   int nextArrival = -1;     // index of the arrival with the smallest ETA
   float nextArrivalEtaS = -1;
+  int nextLanding = -1;     // index of the soonest predicted landing (landEtaS)
+  float nextLandingEtaS = -1;
   float freshestAgeS = -1;  // age of the newest position, -1 with no traffic
 };
 
@@ -51,6 +54,10 @@ bool isHelicopter(const Aircraft& a);
 // Classifies one aircraft at `pos` (its current estimated position) whose
 // last position is `ageS` seconds old, relative to `airport`'s runways.
 FlightCue classifyFlight(const Track& t, const LatLon& pos, float ageS, const Place* airport);
+
+// Rough seconds to landing for an aircraft not yet on final: descending (or
+// already low) and heading for `airport`. -1 when it does not look inbound.
+float inboundEtaS(const Track& t, const LatLon& pos, float ageS, const Place* airport);
 
 // Builds targets for every tracked aircraft. `out` is cleared first.
 void analyzeTraffic(const Tracker& tracker, const Settings& s, uint32_t nowMs,

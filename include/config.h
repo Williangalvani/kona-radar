@@ -118,10 +118,11 @@
 #ifndef RADAR_ALERT_ETA_S
 #define RADAR_ALERT_ETA_S 75
 #endif
-// An arrival this close counts as imminent: it keeps the screen out of idle
-// and wakes it.
-#ifndef RADAR_IMMINENT_ETA_S
-#define RADAR_IMMINENT_ETA_S 240
+// Wake the screen (from idle, screen-off, or a swipe-down) when an aircraft
+// is predicted to land within this many minutes, and keep it awake until it
+// lands (runtime landingWakeMin, 0 = off).
+#ifndef RADAR_LANDING_WAKE_MIN
+#define RADAR_LANDING_WAKE_MIN 10
 #endif
 
 // ---------------------------------------------------------------------------
@@ -170,7 +171,7 @@
 #define RADAR_NIGHT_BRIGHTNESS 12
 #endif
 // Enter the dim idle screen after this many seconds without touch and
-// without an imminent arrival (runtime, 0 disables).
+// without an aircraft about to land (runtime, 0 disables).
 #ifndef RADAR_IDLE_DIM_S
 #define RADAR_IDLE_DIM_S 90
 #endif

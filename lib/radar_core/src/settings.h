@@ -39,6 +39,7 @@ struct Settings {
   uint8_t nightMode;  // 0 = by the hours, 1 = always day, 2 = always night
   uint16_t blackoutS;
   uint8_t alerts;  // full-screen arrival alerts on/off
+  uint8_t landingWakeMin;  // wake for a landing this many minutes out, 0 = off
 
   static Settings defaults();
 

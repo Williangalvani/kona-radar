@@ -156,7 +156,9 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
  <div class="row"><div><label for="idleDimS">Quiet screen after (s, 0 = never)</label><input id="idleDimS" type="number" min="0"></div>
  <div><label for="idleBrightness">Quiet brightness (%)</label><input id="idleBrightness" type="number" min="0" max="100"></div></div>
  <label for="blackoutS">Screen off after quiet for (s, 0 = never)</label><input id="blackoutS" type="number" min="0">
- <label for="wakeRangeNm">Wake when a plane is within (NM of you, 0 = only for arrivals)</label><input id="wakeRangeNm" type="number" min="0">
+ <label for="landingWakeMin">Wake for landings (minutes before touchdown, 0 = off)</label><input id="landingWakeMin" type="number" min="0" max="30">
+ <div class="hint">Turns the screen on &mdash; even after a swipe down or screen-off &mdash; when a plane looks set to land within this time, and keeps it on until it does. Night brightness still applies.</div>
+ <label for="wakeRangeNm">Also wake when any plane is within (NM of you, 0 = off)</label><input id="wakeRangeNm" type="number" min="0">
  <label for="nightMode">Night colors</label>
  <select id="nightMode"><option value="0">by the hours below</option><option value="1">never</option><option value="2">always</option></select>
  <div class="row"><div><label for="nightStartH">Night from (hour)</label><input id="nightStartH" type="number" min="0" max="23"></div>
@@ -183,7 +185,7 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
 </div>
 <div id="toast"></div>
 </main><script>
-var S={},RANGES=%RANGES%,NUM=['observerAltFt','brightness','idleDimS','idleBrightness','blackoutS','wakeRangeNm','nightStartH','nightEndH','nightBrightness','refreshS'];
+var S={},RANGES=%RANGES%,NUM=['observerAltFt','brightness','idleDimS','idleBrightness','blackoutS','landingWakeMin','wakeRangeNm','nightStartH','nightEndH','nightBrightness','refreshS'];
 function $(i){return document.getElementById(i)}
 function toast(t){var e=$('toast');e.textContent=t;e.style.display='block';setTimeout(function(){e.style.display='none'},2500)}
 function pair(v){var m=String(v).split(/[ ,;]+/).filter(Boolean).map(Number);return m.length==2&&!isNaN(m[0])&&!isNaN(m[1])&&Math.abs(m[0])<=90&&Math.abs(m[1])<=180?m:null}

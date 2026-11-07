@@ -100,6 +100,24 @@ FlightCue classifyFlight(const Track& t, const LatLon& pos, float ageS, const Pl
   return cue;
 }
 
+float inboundEtaS(const Track& t, const LatLon& pos, float ageS, const Place* airport) {
+  const Aircraft& a = t.ac;
+  if (!airport || a.onGround || isHelicopter(a) || !a.hasTrack || !a.hasGs || !a.hasAlt || a.gsKt < 80 ||
+      ageS > RADAR_STALE_NO_ETA_S)
+    return -1;
+  const double d = distanceNm(pos, airport->pos);
+  if (d < 2 || d > 120) return -1;
+  if (std::fabs(wrap180(a.trackDeg - bearingDeg(pos, airport->pos))) > 60) return -1;
+  const double vr = a.hasVertRate ? a.vertRateFpm : 0;
+  // Not climbing, low enough to get down in time, and either descending or
+  // already at pattern-ish height for the distance.
+  if (vr > 100 || a.altFt > 1500 + 400 * d) return -1;
+  if (vr > -300 && a.altFt > 2500 + 150 * d) return -1;
+  // Path a bit longer than the straight line (joining the approach), flown a
+  // bit slower than now (slowing down for final).
+  return static_cast<float>((1.15 * d + 3.0) / (0.85 * a.gsKt) * 3600.0);
+}
+
 void analyzeTraffic(const Tracker& tracker, const Settings& s, uint32_t nowMs,
                     std::vector<Target>& out, TrafficSummary& summary) {
   out.clear();
@@ -137,6 +155,14 @@ void analyzeTraffic(const Tracker& tracker, const Settings& s, uint32_t nowMs,
         (summary.nextArrival < 0 || g.cue.etaS < summary.nextArrivalEtaS)) {
       summary.nextArrival = static_cast<int>(out.size());
       summary.nextArrivalEtaS = g.cue.etaS;
+    }
+    if (g.cue.phase == FlightPhase::Arrival)
+      g.landEtaS = g.cue.etaS;
+    else if (g.cue.phase == FlightPhase::Cruise)
+      g.landEtaS = inboundEtaS(t, g.pos, g.ageS, airport);
+    if (g.landEtaS >= 0 && (summary.nextLanding < 0 || g.landEtaS < summary.nextLandingEtaS)) {
+      summary.nextLanding = static_cast<int>(out.size());
+      summary.nextLandingEtaS = g.landEtaS;
     }
     out.push_back(g);
   }
