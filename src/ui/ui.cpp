@@ -4,16 +4,13 @@
 #include <cstdlib>
 
 #include "config.h"
+#include "rotation.h"
 #include "theme.h"
 
 namespace ui {
 namespace {
 
 constexpr int kTapMovePx = 18;
-constexpr int kSwipePx = 45;
-// Up/down swipes switch night colors / the quiet screen, so they need a
-// longer, clearly vertical stroke than the sideways zoom.
-constexpr int kSwipeVerticalPx = 80;
 constexpr uint32_t kToastMs = 3500;
 constexpr uint32_t kTapMaxMs = 700;
 constexpr uint32_t kHoldShowMs = 800;
@@ -241,12 +238,14 @@ void Ui::pollTouch(uint32_t now) {
   hideHold();
   if (active_) active_->press(last_.x - sx, last_.y - sy, false);
   if (holdFired_ || !active_) return;
-  const int dx = last_.x - start_.x, dy = last_.y - start_.y;
-  if (std::abs(dx) > kSwipePx && std::abs(dx) >= std::abs(dy)) {
-    active_->swipe(dx < 0 ? Swipe::Left : Swipe::Right);
-    if (active_ == &link_ && dx > 0) back();
-  } else if (std::abs(dy) > kSwipeVerticalPx && std::abs(dy) * 10 > std::abs(dx) * 13) {
-    active_->swipe(dy < 0 ? Swipe::Up : Swipe::Down);
+  // Points are on the rotated picture already (lvgl_port maps raw touches),
+  // so the directions follow the screen rotation.
+  const radar::Stroke stroke = radar::classifyStroke(last_.x - start_.x, last_.y - start_.y);
+  if (stroke == radar::Stroke::Left || stroke == radar::Stroke::Right) {
+    active_->swipe(stroke == radar::Stroke::Left ? Swipe::Left : Swipe::Right);
+    if (active_ == &link_ && stroke == radar::Stroke::Right) back();
+  } else if (stroke != radar::Stroke::None) {
+    active_->swipe(stroke == radar::Stroke::Up ? Swipe::Up : Swipe::Down);
   } else if (!moved_ && now - downMs_ < kTapMaxMs) {
     if (active_ == &link_)
       back();
