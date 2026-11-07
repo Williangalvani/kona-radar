@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "rotation.h"
 #include "screens.h"
 #include "theme.h"
 
@@ -16,13 +17,15 @@ void backChevron(draw::Surface& s) {
 
 bool onBack(int x, int y) { return x < 170 && y < 106; }
 
-constexpr int kRowX0 = 103, kRowX1 = 363, kRowTop = 112, kRowH = 44, kRowGap = 8;
+constexpr int kRowX0 = 103, kRowX1 = 363, kRowTop = 106, kRowH = 38, kRowGap = 6;
 
 int rowTop(int i) { return kRowTop + i * (kRowH + kRowGap); }
 
 const char* const kMenuLabels[MenuScreen::kItems] = {
-    "Settings on phone", "Balcony alignment", "Night colors", "Quiet screen", "Gestures guide",
+    "Settings on phone", "Balcony alignment", "Night colors", "Screen rotation", "Quiet screen", "Gestures guide",
 };
+
+enum MenuRow { kRowPhone, kRowAlignment, kRowNight, kRowRotation, kRowQuiet, kRowGuide };
 
 uint32_t pressedFill() {
   const Palette& p = palette();
@@ -41,9 +44,9 @@ void MenuScreen::build(lv_obj_t* parent) {
   for (int i = 0; i < kItems; ++i) {
     const int y = rowTop(i);
     rows_[i] = panel(root_, kRowX0, y, kRowX1, y + kRowH, 12, p.panel, p.panelLine);
-    labels_[i].create(root_, kRowX0 + 18, y + 12, font::medium(18), p.text, Align::Left);
+    labels_[i].create(root_, kRowX0 + 18, y + 9, font::medium(18), p.text, Align::Left);
     labels_[i].set(kMenuLabels[i]);
-    values_[i].create(root_, kRowX1 - 18, y + 16, font::mono(11), p.muted, Align::Right, 1);
+    values_[i].create(root_, kRowX1 - 18, y + 13, font::mono(11), p.muted, Align::Right, 1);
   }
   ip_.create(root_, 233, 378, font::mono(13), p.accent);
   ota_.create(root_, 233, 401, font::mono(11), p.muted, Align::Center, 1);
@@ -54,12 +57,17 @@ void MenuScreen::build(lv_obj_t* parent) {
 
 void MenuScreen::refresh(const Model& m) {
   const Palette& p = palette();
-  values_[0].set("QR \xE2\x86\x92");
-  values_[1].set("\xE2\x86\x92");
-  values_[2].set(m.night ? "ON" : "OFF");
-  values_[2].setColor(m.night ? p.amber : p.muted);
-  values_[3].set("\xE2\x86\x93");
-  values_[4].set("?");
+  values_[kRowPhone].set("QR \xE2\x86\x92");
+  values_[kRowAlignment].set("\xE2\x86\x92");
+  values_[kRowNight].set(m.night ? "ON" : "OFF");
+  values_[kRowNight].setColor(m.night ? p.amber : p.muted);
+  rotation_ = m.settings.screenRotation & 3;
+  char deg[8];
+  std::snprintf(deg, sizeof(deg), "%d\xC2\xB0", radar::rotationDegrees(rotation_));
+  values_[kRowRotation].set(deg);
+  values_[kRowRotation].setColor(rotation_ ? p.accent : p.muted);
+  values_[kRowQuiet].set("\xE2\x86\x93");
+  values_[kRowGuide].set("?");
   if (m.online && !m.lanIp.empty())
     ip_.set("http://" + m.lanIp + "/");
   else
@@ -91,20 +99,25 @@ void MenuScreen::tap(int x, int y) {
     return;
   }
   switch (itemAt(x, y)) {
-    case 0:
+    case kRowPhone:
       if (nav_) nav_->openPhoneLink();
       break;
-    case 1:
+    case kRowAlignment:
       if (nav_) nav_->openAlignment();
       break;
-    case 2:
+    case kRowNight:
       if (actions_) actions_->toggleNight();
       break;
-    case 3:
+    case kRowRotation:
+      // The menu stays open, so tapping again keeps turning until the text
+      // reads upright. The row is at the same place on the turned picture.
+      if (actions_) actions_->setScreenRotation((rotation_ + 1) & 3);
+      break;
+    case kRowQuiet:
       if (nav_) nav_->back();
       if (actions_) actions_->goIdle();
       break;
-    case 4:
+    case kRowGuide:
       if (nav_) nav_->openGuide();
       break;
     default:
@@ -132,7 +145,7 @@ const GuidePage kGuide[GuideScreen::kPages] = {
      {"\xE2\x86\x90 \xE2\x86\x92  Zoom in and out", "\xE2\x86\x91  Night colors on and off",
       "\xE2\x86\x93  Quiet screen (tap to wake)"}},
     {"Hold",
-     {"Hold 5 seconds to reset Wi-Fi", "MENU shows the phone address",
+     {"Hold 5 seconds to reset Wi-Fi", "MENU: phone address, rotation",
       "MENU \xE2\x86\x92 Gestures guide shows this again"}},
 };
 

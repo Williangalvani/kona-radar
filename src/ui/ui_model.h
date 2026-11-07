@@ -53,7 +53,7 @@ struct Model {
   bool ipNotice = false;   // just connected: show the address for a moment
 
   // Device
-  std::string firmwareVersion;  // "2.1.0"
+  std::string firmwareVersion;  // "2.2.0"
   std::string otaPassword;      // firmware-update password (shown on the device only)
   int otaProgress = -1;         // 0..100 while a firmware update is received
   bool guidePending = false;    // first run: the gesture guide was never closed
@@ -90,6 +90,9 @@ class Actions {
   virtual void resetWifi() = 0;        // 5 s hold: forget Wi-Fi, start setup
   virtual void dismissAlert(const char* hex) = 0;
   virtual void guideDone() = 0;        // the gesture guide was closed
+  // Physical mounting: clockwise quarter turns of the picture (0..3). The
+  // radar's view-up / north-up orientation is separate and unaffected.
+  virtual void setScreenRotation(uint8_t quarterTurns) = 0;
 };
 
 }  // namespace ui

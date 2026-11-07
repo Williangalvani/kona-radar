@@ -144,9 +144,10 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
  <input id="viewBearingDeg" type="number" min="0" max="359"></div>
  <div class="hint" id="bhint"></div>
  <label for="rangeNm">Range</label><select id="rangeNm"></select>
- <label for="screenRotation">Screen mounting</label>
- <select id="screenRotation"><option value="0">normal</option><option value="1">rotated 90&deg; clockwise</option>
- <option value="2">upside down</option><option value="3">rotated 270&deg; clockwise</option></select>
+ <label for="screenRotation">Screen rotation</label>
+ <select id="screenRotation"><option value="0">0&deg; (normal)</option><option value="1">90&deg; (picture turned clockwise)</option>
+ <option value="2">180&deg; (upside down)</option><option value="3">270&deg; (picture turned counter-clockwise)</option></select>
+ <div class="hint">For the way the radar is mounted; applies right away. Also on the radar: MENU &rsaquo; Screen rotation. The radar&rsquo;s own up (view or north) stays as set above.</div>
 </div>
 <h2>Alerts</h2><div class="card">
  <label class="check"><input type="checkbox" id="alerts"> Full-screen &ldquo;look&rdquo; alert about a minute before a likely landing</label>

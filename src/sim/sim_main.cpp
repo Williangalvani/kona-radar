@@ -10,7 +10,10 @@
 // spot, night variants, bezel shifts).
 //
 // The display path matches the device: 466x32 partial buffers, the same
-// rounder, RGB565 with byte swap.
+// rounder, RGB565 with byte swap, and the same software rotation (the
+// second buffer becomes the rotation target, g_fb holds what the panel
+// shows). Touches are injected where the viewer touches the picture and go
+// through the device's raw-touch mapping.
 #include <lvgl.h>
 
 #include <algorithm>
@@ -28,10 +31,14 @@
 #include "app_clock.h"
 #include "config.h"
 #include "geo.h"
+#include "rotation.h"
 #include "tracker.h"
 #include "traffic.h"
 #include "ui/theme.h"
 #include "ui/ui.h"
+
+size_t simLvLiveBytes();
+size_t simLvLiveBlocks();
 
 namespace {
 
@@ -46,20 +53,34 @@ lv_disp_draw_buf_t g_drawBuf;
 lv_disp_drv_t g_dispDrv;
 lv_indev_drv_t g_indevDrv;
 bool g_pressed = false;
-lv_point_t g_touch{0, 0};
+lv_point_t g_touch{0, 0};  // raw, in panel coordinates
+uint8_t g_rot = 0;
+int g_misaligned = 0;
 uint64_t g_flushedPixels = 0;
 std::string g_outDir = "sim_out";
 bool g_rawCorners = false;
 
 void flushCb(lv_disp_drv_t* drv, const lv_area_t* a, lv_color_t* px) {
-  const int w = a->x2 - a->x1 + 1;
-  for (int y = a->y1; y <= a->y2; ++y) {
-    for (int x = a->x1; x <= a->x2; ++x) {
-      g_fb[y * W + x] = px[(y - a->y1) * w + (x - a->x1)].full;
-    }
+  const radar::PanelBlock b = radar::toPanel(g_rot, W, H, a->x1, a->y1, a->x2, a->y2,
+                                             reinterpret_cast<const uint16_t*>(px),
+                                             reinterpret_cast<uint16_t*>(g_buf2));
+  // The CO5300 takes areas in 2x2 units.
+  if ((b.x1 | b.y1) & 1 || !(b.x2 & b.y2 & 1)) ++g_misaligned;
+  const int w = b.x2 - b.x1 + 1;
+  for (int y = b.y1; y <= b.y2; ++y) {
+    for (int x = b.x1; x <= b.x2; ++x) g_fb[y * W + x] = b.pixels[(y - b.y1) * w + (x - b.x1)];
   }
-  g_flushedPixels += static_cast<uint64_t>(w) * (a->y2 - a->y1 + 1);
+  g_flushedPixels += static_cast<uint64_t>(w) * (b.y2 - b.y1 + 1);
   lv_disp_flush_ready(drv);
+}
+
+// As hal::lvglPortSetRotation: single-buffered while rotated.
+void applyRotation(uint8_t rot) {
+  rot &= 3;
+  if (rot == g_rot) return;
+  g_rot = rot;
+  lv_disp_draw_buf_init(&g_drawBuf, g_buf1, rot ? nullptr : g_buf2, W * kBufRows);
+  lv_obj_invalidate(lv_scr_act());
 }
 
 void rounderCb(lv_disp_drv_t*, lv_area_t* a) {
@@ -70,7 +91,9 @@ void rounderCb(lv_disp_drv_t*, lv_area_t* a) {
 }
 
 void touchCb(lv_indev_drv_t*, lv_indev_data_t* d) {
-  d->point = g_touch;
+  int x, y;
+  radar::touchToLogical(g_rot, W, H, g_touch.x, g_touch.y, x, y);
+  d->point = {static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(y)};
   d->state = g_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
@@ -223,6 +246,7 @@ struct SimApp : ui::Actions {
   radar::Tracker tracker;
   std::vector<radar::Target> targets;
   int wifiResets = 0, retries = 0, opened = 0, guidesClosed = 0;
+  void setScreenRotation(uint8_t r) override { model.settings.screenRotation = r & 3; }
   std::string dismissed;
   void setRange(uint16_t nm) override { model.settings.rangeNm = nm; }
   void setNorthUp(bool on) override { model.settings.northUp = on; }
@@ -259,6 +283,7 @@ ui::Ui g_ui;
 void run(uint32_t ms) {
   const uint32_t end = g_now + ms;
   while (g_now < end) {
+    applyRotation(g_app.model.settings.screenRotation);
     g_app.model.nowMs = g_now;
     if (g_now % 200 == 0) g_app.analyze();
     g_ui.update(g_app.model);
@@ -267,8 +292,15 @@ void run(uint32_t ms) {
   }
 }
 
+// Where a finger on picture point (x, y) lands on the panel.
+lv_point_t raw(int x, int y) {
+  int px, py;
+  radar::rotatePoint(g_rot, W, H, x, y, px, py);
+  return {static_cast<lv_coord_t>(px), static_cast<lv_coord_t>(py)};
+}
+
 void press(lv_coord_t x, lv_coord_t y, uint32_t ms) {
-  g_touch = {x, y};
+  g_touch = raw(x, y);
   g_pressed = true;
   run(ms);
 }
@@ -284,17 +316,22 @@ void tap(lv_coord_t x, lv_coord_t y) {
   run(300);
 }
 
-void swipe(lv_coord_t x0, lv_coord_t y0, lv_coord_t x1, lv_coord_t y1) {
-  g_touch = {x0, y0};
+// A stroke in panel coordinates, or (as the viewer draws it) on the picture.
+void strokeRaw(int x0, int y0, int x1, int y1, bool onPicture) {
+  auto at = [&](int x, int y) { return onPicture ? raw(x, y) : lv_point_t{static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(y)}; };
+  g_touch = at(x0, y0);
   g_pressed = true;
   run(60);
   for (int i = 1; i <= 5; ++i) {
-    g_touch = {static_cast<lv_coord_t>(x0 + (x1 - x0) * i / 5), static_cast<lv_coord_t>(y0 + (y1 - y0) * i / 5)};
+    g_touch = at(x0 + (x1 - x0) * i / 5, y0 + (y1 - y0) * i / 5);
     run(40);
   }
   release();
   run(300);
 }
+
+void swipe(lv_coord_t x0, lv_coord_t y0, lv_coord_t x1, lv_coord_t y1) { strokeRaw(x0, y0, x1, y1, true); }
+void panelSwipe(int x0, int y0, int x1, int y1) { strokeRaw(x0, y0, x1, y1, false); }
 
 // Where the radar draws an aircraft (same projection as the view).
 lv_point_t blipAt(const char* hex) {
@@ -399,6 +436,41 @@ void shot(const char* name) {
   writePng(g_outDir + "/" + name + ".png");
   audit(name);
 }
+
+// The panel's own pixels, for rotated scenes (the text audit works on the
+// unrotated picture).
+void shotPanel(const char* name) { writePng(g_outDir + "/" + name + ".png"); }
+
+// Renders the current screen unrotated and rotated, with the clock stopped,
+// and checks the panel shows the same picture turned by `rot`.
+bool samePictureRotated(uint8_t rot) {
+  const uint8_t keep = g_rot;
+  applyRotation(0);
+  lv_obj_invalidate(lv_scr_act());
+  lv_refr_now(nullptr);
+  const std::vector<uint16_t> ref(g_fb, g_fb + W * H);
+  applyRotation(rot);
+  lv_obj_invalidate(lv_scr_act());
+  lv_refr_now(nullptr);
+  bool same = true;
+  for (int py = 0; py < H && same; ++py) {
+    for (int px = 0; px < W; ++px) {
+      int x, y;
+      radar::unrotatePoint(rot, W, H, px, py, x, y);
+      if (g_fb[py * W + px] != ref[y * W + x]) {
+        same = false;
+        break;
+      }
+    }
+  }
+  applyRotation(keep);
+  lv_obj_invalidate(lv_scr_act());
+  lv_refr_now(nullptr);
+  return same;
+}
+
+// Menu rows (screens_menu.cpp): top 106, 38 tall, 6 apart.
+lv_coord_t menuRow(int i) { return static_cast<lv_coord_t>(106 + 44 * i + 19); }
 
 void shotf(const char* fmt, int a, int b = 0) {
   char n[64];
@@ -742,19 +814,19 @@ int main() {
   tap(374, 127);
   run(300);
   shot("18_menu");
-  tap(233, 134);
+  tap(233, menuRow(0));
   run(300);
   shot("18b_menu_phone_link");
   tap(233, 233);
   run(300);
   shot("18c_back_to_menu");
-  tap(233, 238);
+  tap(233, menuRow(2));
   run(400);
   expect(m.night, "menu toggles night colors");
-  tap(233, 238);
+  tap(233, menuRow(2));
   run(400);
   expect(!m.night, "and back");
-  tap(233, 342);
+  tap(233, menuRow(5));
   run(300);
   shot("19_guide_tap");
   tap(233, 233);
@@ -798,6 +870,107 @@ int main() {
   release();
   expect(g_app.wifiResets == 1, "holding 5 s resets Wi-Fi");
   expect(m.settings.rangeNm == 10 && m.settings.viewBearingDeg == 260, "other settings untouched by the hold");
+
+  std::printf("screen rotation\n");
+  run(600);
+  for (uint8_t r = 1; r < 4; ++r) {
+    char what[96];
+    std::snprintf(what, sizeof(what), "radar (view up) at %d degrees: the panel shows the same picture turned",
+                  radar::rotationDegrees(r));
+    expect(samePictureRotated(r), what);
+  }
+  m.settings.northUp = true;
+  run(600);
+  expect(samePictureRotated(1), "radar (north up) at 90 degrees: the same picture turned");
+  m.settings.northUp = false;
+  run(600);
+  tap(374, 127);
+  run(300);
+  expect(g_ui.onMenu(), "MENU opens the menu");
+  tap(233, menuRow(3));
+  run(300);
+  expect(m.settings.screenRotation == 1 && g_rot == 1, "MENU > Screen rotation turns the picture to 90 degrees, live");
+  expect(g_ui.onMenu(), "the menu stays open for another turn");
+  expect(samePictureRotated(1), "menu at 90 degrees: the same picture turned");
+  shotPanel("24_rotation_90_menu_panel");
+  swipe(150, 250, 330, 250);
+  expect(g_ui.onRadar(), "at 90 degrees, the viewer's swipe right goes back to the radar");
+  {
+    const uint16_t before = m.settings.rangeNm;
+    swipe(330, 250, 150, 250);
+    expect(m.settings.rangeNm > before, "and the viewer's swipe left zooms out");
+  }
+  m.settings.rangeNm = 5;
+  run(1200);
+  {
+    const lv_point_t p = blipAt("a8a250");
+    tap(p.x, p.y);
+    expect(g_ui.focusedAircraft() == "a8a250", "tapping a plane at 90 degrees selects it");
+  }
+  run(600);
+  shotPanel("24b_rotation_90_radar_panel");
+  tap(233, 252);
+  panelSwipe(100, 233, 366, 233);
+  run(300);
+  expect(m.night, "at 90 degrees a stroke along the panel's x axis is the viewer's swipe up");
+  swipe(233, 300, 233, 150);
+  run(4000);
+  expect(!m.night, "and the viewer's swipe up switches back");
+  tap(374, 127);
+  run(300);
+  for (int k = 0; k < 3; ++k) {
+    tap(233, menuRow(3));
+    run(300);
+  }
+  expect(m.settings.screenRotation == 0 && g_rot == 0, "three more taps come round to 0 degrees");
+  swipe(150, 250, 330, 250);
+  m.settings.rangeNm = 10;
+  run(600);
+  expect(g_misaligned == 0, "every flushed area is 2x2 aligned on the panel, at every rotation");
+
+  std::printf("memory\n");
+  {
+    auto round = [&] {
+      seed(g_app.tracker, designTraffic());
+      run(1500);
+      tap(374, 127);
+      run(300);
+      tap(233, menuRow(2));  // night colors rebuild every screen
+      run(400);
+      tap(233, menuRow(2));
+      run(400);
+      for (int k = 0; k < 4; ++k) {
+        tap(233, menuRow(3));
+        run(300);
+      }
+      tap(233, menuRow(5));
+      run(300);
+      for (int k = 0; k < 3; ++k) tap(233, 233);
+      run(6500);
+      g_ui.openDetail("a1d208");
+      run(300);
+      g_ui.back();
+      run(300);
+      m.alertHex = "a1d208";
+      run(600);
+      tap(233, 233);
+      run(300);
+      tap(108, 79);
+      swipe(233, 150, 233, 300);
+      tap(233, 233);
+      m.otaProgress = 50;
+      run(300);
+      m.otaProgress = -1;
+      run(4000);
+      expect(m.alertHex.empty() && !m.idle && g_ui.onRadar(), "  (round ends back on the radar)");
+    };
+    round();
+    const size_t b0 = simLvLiveBytes(), n0 = simLvLiveBlocks();
+    for (int k = 0; k < 5; ++k) round();
+    const size_t b1 = simLvLiveBytes(), n1 = simLvLiveBlocks();
+    std::printf("  LVGL heap %zu bytes in %zu blocks; after 5 more rounds %zu bytes in %zu blocks\n", b0, n0, b1, n1);
+    expect(n1 == n0 && b1 == b0, "menu, rotation, night, guide, detail, alert, idle and update rounds do not grow LVGL's heap");
+  }
 
   std::printf("north-up, unset observer, live fixture traffic\n");
   {

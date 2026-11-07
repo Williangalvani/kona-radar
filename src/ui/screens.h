@@ -216,7 +216,7 @@ class AlignmentScreen : public Screen {
 // Menu: the way to every page, plus the address and update password.
 class MenuScreen : public Screen {
  public:
-  static constexpr int kItems = 5;
+  static constexpr int kItems = 6;
   void build(lv_obj_t* parent) override;
   void refresh(const Model& m) override;
   void tap(int x, int y) override;
@@ -229,6 +229,7 @@ class MenuScreen : public Screen {
   Text title_, labels_[kItems], values_[kItems], ip_, ota_, footer_;
   lv_obj_t* rows_[kItems] = {};
   int pressed_ = -1;
+  uint8_t rotation_ = 0;
 };
 
 // First-run gesture guide (also from the menu): three pages, tap to go on.
