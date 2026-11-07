@@ -27,6 +27,10 @@ class AmoledPanel {
   uint8_t rawId() const { return rawId_; }
   const char* name() const { return type_ == PanelType::SH8601 ? "SH8601" : "CO5300"; }
 
+  // Pulses the panel reset line and runs the init sequence again (after
+  // begin()). Brightness is restored.
+  bool reinit();
+
   // True once begin() succeeded.
   bool ready() const { return panel_ != nullptr; }
 

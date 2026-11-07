@@ -4,7 +4,6 @@
 // the quiet idle screen, screen-off and pixel shift.
 #include <Arduino.h>
 #include <WiFi.h>
-#include <Wire.h>
 #include <esp_heap_caps.h>
 #include <lvgl.h>
 #include <time.h>
@@ -17,6 +16,7 @@
 #include "config.h"
 #include "hal/amoled_panel.h"
 #include "hal/board_pins.h"
+#include "hal/i2c_bus.h"
 #include "hal/lvgl_port.h"
 #include "hal/touch_ft3168.h"
 #include "net/adsb_client.h"
@@ -33,6 +33,7 @@ extern "C" uint32_t app_millis(void) { return millis(); }
 namespace {
 
 hal::AmoledPanel g_panel;
+hal::I2cBus g_i2c;
 hal::TouchFt3168 g_touch;
 app::SettingsStore g_store;
 net::WifiManager g_wifi;
@@ -381,13 +382,27 @@ void setup() {
 
   g_settings = g_store.load();
 
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 400000);
-  if (!g_touch.begin(Wire)) log_w("touch controller not found");
-
   if (!hal::lvglPortBegin(g_panel, g_touch)) {
     log_e("display init failed; running without a screen");
   }
   log_i("panel %s (id 0x%02X)", g_panel.name(), g_panel.rawId());
+
+  // Touch after the panel, as in Waveshare's ESP-IDF demo: by then the
+  // controller has been powered for well over its 70 ms start-up time and
+  // the module's reset line has been released.
+  g_i2c.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
+  if (!g_touch.begin(g_i2c, 800) && g_panel.ready()) {
+    // The touch reset pin is not wired to the ESP32; if the module ties it
+    // to the panel reset, this resets the controller too. Nothing has been
+    // drawn yet, so the panel can be reset freely.
+    log_i("touch: resetting the panel module and trying again");
+    g_panel.reinit();
+    delay(100);
+    g_touch.retry(600);
+  }
+  // After the touch controller is configured: bus traffic to other
+  // addresses blocks a sleeping FT3168 (datasheet 2.3).
+  g_i2c.scanAndLog();
   hal::lvglPortSetRotation(g_settings.screenRotation);
   hal::lvglPortSetTouchStartHook(onTouchStart);
 
