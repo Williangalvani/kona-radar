@@ -87,8 +87,24 @@ What the firmware does about it:
   the log.
 
 Graphics use **LVGL 8.4** with two 466×32-line DMA buffers in internal RAM.
-The controller has no rotation hardware, so rotation is done in software in the
-flush callback. The radar background (coastline, rings, runway, view cone) is
+LVGL's own heap (objects, styles, label text, about 53 KB in ~1,000 small
+blocks) is in PSRAM (`include/lv_mem_hooks.h`), so it doesn't compete with
+Wi-Fi and TLS for internal RAM.
+
+**Screen rotation** (0°, 90°, 180°, 270°) is done in software in the flush
+callback. The CO5300 can't do it in hardware: its MADCTL register only mirrors
+X and Y and has no row/column exchange. Arduino_GFX's `Arduino_CO5300::setRotation`
+says "CO5300 does not support rotation", and the SH8601-family driver here
+returns *not supported* for `swap_xy`. A mirrored 180° would also need a
+different column offset that isn't documented for this module. While
+rotated, LVGL renders single-buffered and the flush rotates each block into
+the second buffer, which the panel then receives. Rendering still overlaps
+the transfer, and no third buffer is needed. The rounder keeps areas on even
+start / odd end, and with the even 466 px size that holds after rotation too.
+Touch points get the inverse mapping before LVGL sees them, so taps and
+swipe directions follow the turned picture. Rotation only makes up for how the board
+is mounted. The radar's own "up" (the direction you face, or north) is a
+separate setting and stays as it is. The radar background (coastline, rings, runway, view cone) is
 pre-rendered into a 434 KB PSRAM layer and redrawn only when the range or
 orientation changes. Text uses IBM Plex fonts converted to 4-bit LVGL bitmaps.
 
@@ -282,6 +298,9 @@ otherwise a gesture:
   update password.
 - **Balcony alignment**.
 - **Night colors**, on or off.
+- **Screen rotation**: each tap turns the picture 90° clockwise, live. The
+  menu stays open, so keep tapping until the text reads upright. The setting
+  is saved, and it's also on the settings page.
 - **Quiet screen**.
 - **Gestures guide**.
 
@@ -420,7 +439,7 @@ but many Android phones (Samsung included) don't resolve `.local` names.
 | Top of the screen | the direction you face (view up); or north |
 | You face | toward the airport (auto); or a compass bearing |
 | Range | 10 NM (5 / 10 / 20) |
-| Screen mounting rotation | 0 |
+| Screen rotation (how the radar is mounted) | 0° (also MENU › Screen rotation) |
 | Look-up alerts | on |
 | Brightness | 80% |
 | Quiet screen after / its brightness | 90 s / 40% |
@@ -536,7 +555,7 @@ The QR setup screen is the only white area. It is shown only during setup.
 docs/design/              the UI design: DESIGN.md (spec), screens/, device/, contact sheet,
                           render.py (pixel reference), verify.py, fonts (IBM Plex, OFL)
 include/config.h          build-time defaults; include/config.local.h (gitignored) overrides
-include/lv_conf.h         LVGL configuration
+include/lv_conf.h         LVGL configuration; lv_mem_hooks.h: LVGL's heap (PSRAM on the device)
 lib/radar_core/           portable C++ with no Arduino dependency (tested on the host)
   adsb_parser.*           readsb / ADSBx-v2 JSON (adsb.fi, adsb.lol) -> Aircraft
   geo.*                   haversine, observer-centered projection with view rotation, look angles
@@ -545,6 +564,7 @@ lib/radar_core/           portable C++ with no Arduino dependency (tested on the
   landing_wake.*          when to wake the screen for a landing (once per aircraft)
   known_networks.*        saved Wi-Fi list: dedupe, LRU cap of 8, join order from a scan
   brightness.*            percent -> panel brightness register (curve with a floor)
+  rotation.h              screen rotation: rotated flush blocks, raw touch -> picture, swipe classifier
   settings.*              Settings struct, validation, JSON (web page + NVS)
   format.*                text: altitudes, airline/type names, "RIGHT 42°", "~3 MIN", "NW 305°T"
   places.*, coastline_data.cpp   airports with runway thresholds, simplified coastlines
@@ -584,7 +604,7 @@ touch drivers, networking or storage. To change fonts or glyph sets, edit
 ## Tests and simulator
 
 ```bash
-pio test -e native                                     # 45 unit tests in 4 suites, no hardware
+pio test -e native                                     # 48 unit tests in 4 suites, no hardware
 pio run -e simulator && .pio/build/simulator/program   # screenshots in sim_out/ + interaction checks
 python3 docs/design/render.py && python3 docs/design/verify.py   # regenerate/verify the design
 ```
@@ -595,7 +615,11 @@ python3 docs/design/render.py && python3 docs/design/verify.py   # regenerate/ve
   size limits).
 - Checking the projection against the distance and bearing the servers
   compute.
-- The view-aligned projection, look angles and screen rotation.
+- The view-aligned projection and look angles.
+- Screen rotation: where a finger on the turned picture is reported and how
+  it maps back (corners, past-the-edge reports), that swipe directions follow
+  the picture at every rotation, and that the rotated 32-line strips cover
+  the panel exactly once with 2×2-aligned areas.
 - KOA runway data.
 - Arrival, departure and helicopter cues and ETA on the design's example
   traffic, including that cues need track history and fresh data.
@@ -623,6 +647,15 @@ through the same gesture recognizer the device uses:
 - night and idle swipes, tap to wake, and that a short or slanted swipe
   doesn't change the colors;
 - the menu, the phone-link page and back to the menu, the gesture guide;
+- screen rotation: at 90°, 180° and 270° the panel shows exactly the
+  unrotated picture turned (view-up and north-up radar, menu). From MENU at
+  90°, the viewer's swipes, taps on planes and back all work, and a stroke
+  along the panel's own x axis counts as the viewer's swipe up. Every
+  flushed area stays 2×2 aligned. The renders are
+  `24_rotation_90_menu_panel.png` and `24b_rotation_90_radar_panel.png`,
+  showing the panel's own pixels;
+- memory: five rounds of menu, rotation, night colors, guide, detail, alert,
+  idle and update screens leave LVGL's heap the same size;
 - dismissing the alert;
 - the setup buttons;
 - the alignment switch;
@@ -660,19 +693,22 @@ traffic cues, UI rendering and interaction logic were all checked on the host.
    - swipes work;
    - a 5 s hold shows the ring and resets Wi-Fi.
 
-   If the picture is sideways for your mounting, set *Screen mounting* on the
-   settings page. Touch rotates with the picture.
+   If the picture is sideways for your mounting, use **MENU › Screen
+   rotation** (or the settings page). Taps and swipes follow the picture.
 3. **Phone setup.** Check that the camera QR joins `Kona-Radar-XXXX` and that
    the page pops up by itself (on an iPhone, the "Kona Radar" sheet). Try a
    wrong password once to see the failure screen. Then enter your location in
    the optional step.
-4. **Frame rate and memory.** Build with `-DRADAR_LOG_FPS=1` and watch the
-   log. Expect well under one full frame of pixels per second when nothing
-   moves, and free internal heap staying above ~40 KB.
+4. **Frame rate and memory.** Every 10 minutes the log prints `heap:
+   internal … free (min …, largest block …)`. `/api/status` has the same as
+   `freeHeap`, `minFreeHeap` and `largestFreeBlock`. *min* and *largest*
+   should level off after the first hour, not keep creeping down. For frame
+   rate, build with `-DRADAR_LOG_FPS=1`: expect well under one full frame of
+   pixels per second when nothing moves.
 5. **Night colors** at the default 35%. They should be clearly readable at
    arm's length but dimmer than day. Adjust *Night %* on the settings page.
 6. **Firmware update over Wi-Fi.** Try `/update` once with a known-good build
-   and watch the log for `firmware 2.1.0 confirmed` about 20 s after it
+   and watch the log for `firmware 2.2.0 confirmed` about 20 s after it
    restarts.
 7. **Direction cues.** Once the location is set, open the alignment screen
    and check that the bearing and "AHEAD/LEFT/RIGHT" match what you see from
