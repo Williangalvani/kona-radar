@@ -41,6 +41,8 @@ class WebUi {
   void handlePostSettings();
   void handleReset();
   void handleStatus();
+  void handleNetworksAdd();
+  void handleNetworksRemove();
   void handleNotFound();
 
   WebServer server_{80};

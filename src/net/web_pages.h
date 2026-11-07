@@ -46,7 +46,7 @@ static const char kPortalPage[] PROGMEM = R"HTML(<!doctype html>
 </style></head><body><main>
 <span class="eyebrow">FIRST FLIGHT</span>
 <h1>Set up your radar</h1>
-<p class="sub">Pick your home Wi-Fi. The radar needs a 2.4&nbsp;GHz network.</p>
+<p class="sub">Pick your home Wi-Fi. The radar needs a 2.4&nbsp;GHz network. Networks saved before are kept; this adds one.</p>
 <h2>1 &middot; Wi-Fi</h2>
 <div id="list"><p class="sub">Looking for networks&hellip;</p></div>
 <button class="link" id="rescan">Search again</button> &nbsp;
@@ -121,6 +121,8 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
 <title>Kona Radar settings</title>
 <style>)HTML" RADAR_PAGE_STYLE R"HTML(
 #status{font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);margin-top:6px}
+.nrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.nrow b{word-break:break-all}.nrow button{padding:8px 12px;font-size:14px}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);padding:12px 18px;border-radius:10px;
  background:var(--panel);border:1px solid var(--cyan);display:none}
 </style></head><body><main>
@@ -170,7 +172,15 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
 <button class="main" type="submit">SAVE</button>
 </form>
 <p><button id="reset" type="button">Restore factory settings</button></p>
-<p class="hint">Wi-Fi: hold the screen for 5 seconds to forget the network and start phone setup again.</p>
+<h2>Wi-Fi networks</h2><div class="card">
+ <div id="netlist" class="hint">Loading&hellip;</div>
+ <label for="nssid">Add a network</label>
+ <input id="nssid" list="seen" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="32" placeholder="Network name">
+ <datalist id="seen"></datalist>
+ <input id="npass" type="password" maxlength="64" placeholder="Password (empty for an open network)" autocomplete="new-password" style="margin-top:8px">
+ <button id="nadd" type="button" style="margin-top:10px">Add network</button>
+ <div class="hint">The radar joins the strongest saved network in range and switches when one drops out. It keeps up to 8; adding another forgets the one used longest ago. Passwords are never shown here. Holding the screen for 5&nbsp;seconds forgets all of them and starts phone setup.</div>
+</div>
 <div id="toast"></div>
 </main><script>
 var S={},RANGES=%RANGES%,NUM=['observerAltFt','brightness','idleDimS','idleBrightness','blackoutS','wakeRangeNm','nightStartH','nightEndH','nightBrightness','refreshS'];
@@ -200,7 +210,24 @@ $('f').onsubmit=function(e){e.preventDefault();var c=pair($('ctr').value),ov=$('
  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(n)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw j;fill(j);toast('Saved')})}).catch(function(j){toast((j&&j.error)||'Save failed')})};
 $('reset').onclick=function(){if(!confirm('Restore factory settings? Wi-Fi stays connected.'))return;
  fetch('/api/reset',{method:'POST'}).then(function(r){return r.json()}).then(function(j){fill(j);toast('Factory settings restored')})};
-fetch('/api/settings').then(function(r){return r.json()}).then(fill);status();setInterval(status,5000);
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function post(u,o){var b=new URLSearchParams();for(var k in o)b.append(k,o[k]);
+ return fetch(u,{method:'POST',body:b}).then(function(r){return r.json().then(function(j){if(!r.ok)throw j;return j})})}
+function showNets(j){var h=j.networks.map(function(n){
+  return '<div class="nrow"><div><b>'+esc(n.ssid)+'</b><div class="hint">'+(n.current?'connected now':n.rssi!==null?'in range \u00b7 '+n.rssi+' dBm':'not seen in the last scan')+(n.open?' \u00b7 open':'')+'</div></div>'+
+   '<button type="button" class="rm" data-s="'+esc(n.ssid)+'" data-c="'+(n.current?1:0)+'">Remove</button></div>'}).join('');
+ $('netlist').innerHTML=h||'No saved networks.';
+ Array.prototype.forEach.call(document.querySelectorAll('.rm'),function(b){b.onclick=function(){var s=b.getAttribute('data-s');
+  if(!confirm(b.getAttribute('data-c')=='1'?'The radar is using '+s+' right now. It stays connected until the connection drops or it restarts. Remove it?':'Remove '+s+'?'))return;
+  post('/api/networks/remove',{ssid:s}).then(function(j){showNets(j);toast('Removed')}).catch(function(j){toast((j&&j.error)||'Failed')})}})}
+function nets(){fetch('/api/networks').then(function(r){return r.json()}).then(showNets).catch(function(){})}
+function seen(){fetch('/api/scan').then(function(r){return r.json()}).then(function(j){
+ $('seen').innerHTML=j.networks.filter(function(n){return!n.saved}).map(function(n){return'<option value="'+esc(n.ssid)+'">'}).join('');
+ if(j.scanning)setTimeout(seen,2000)}).catch(function(){})}
+$('nssid').onfocus=function(){fetch('/api/scan',{method:'POST'}).then(function(){setTimeout(seen,2500)})};
+$('nadd').onclick=function(){var s=$('nssid').value,p=$('npass').value;if(!s){toast('Enter the network name');return}
+ post('/api/networks',{ssid:s,pass:p}).then(function(j){showNets(j);$('nssid').value='';$('npass').value='';toast('Saved '+s)}).catch(function(j){toast((j&&j.error)||'Failed')})};
+fetch('/api/settings').then(function(r){return r.json()}).then(fill);status();setInterval(status,5000);nets();seen();setInterval(nets,15000);
 </script></body></html>
 )HTML";
 
