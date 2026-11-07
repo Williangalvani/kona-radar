@@ -228,4 +228,4 @@
 #define RADAR_RESET_HOLD_S 5
 #endif
 
-#define RADAR_FW_VERSION "2.0.0"
+#define RADAR_FW_VERSION "2.1.0"

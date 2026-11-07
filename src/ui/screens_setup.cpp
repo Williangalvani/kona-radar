@@ -101,11 +101,6 @@ void SetupQrScreen::setQr(const std::string& data) {
   lv_qrcode_update(qr_, data.data(), static_cast<uint32_t>(data.size()));
 }
 
-void SetupQrScreen::showLink(const std::string& url) {
-  linkMode_ = !url.empty();
-  linkUrl_ = url;
-}
-
 std::string wifiQrPayload(const std::string& ssid, const std::string& pass);
 
 void SetupQrScreen::refresh(const Model& m) {
@@ -116,10 +111,11 @@ void SetupQrScreen::refresh(const Model& m) {
     step1_.set("1  Scan with your phone camera");
     step1_.setColor(p.muted);
     step2_.set("2  Use the same Wi-Fi as the radar");
-    setQr(linkUrl_);
-    ssid_.set(m.lanHost);
-    pass_.set(linkUrl_.size() > 7 ? linkUrl_.substr(7) : linkUrl_);
-    hint_.set("Swipe right to go back");
+    const std::string host = m.lanIp.empty() ? m.lanHost : m.lanIp;
+    setQr("http://" + host + "/");
+    ssid_.set("http://" + host);
+    pass_.set(m.lanIp.empty() ? "NOT CONNECTED" : "or " + m.lanHost);
+    hint_.set(m.otaPassword.empty() ? "Tap to go back" : "UPDATE PASSWORD " + m.otaPassword);
     return;
   }
   title_.set("FIRST FLIGHT");
@@ -246,7 +242,7 @@ void ResultScreen::refresh(const Model& m) {
     setKind(Kind::Connected);
     heading_.set("You\xE2\x80\x99re connected");
     line1_.set(m.wifiSsid);
-    line2_.set("Your sky is ready.");
+    line2_.set(m.lanIp.empty() ? "Your sky is ready." : "Settings at " + m.lanIp);
     return;
   }
   if (m.phase == Phase::Offline) {

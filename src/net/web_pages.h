@@ -107,7 +107,7 @@ $('f').onsubmit=function(e){e.preventDefault();var s=manual?$('ssid').value:sel,
 function poll(){fetch('/api/wifi/status').then(function(r){return r.json()}).then(function(j){lost=0;
  if(j.state=='trying'){setTimeout(poll,1000);return}
  if(j.state=='online'){msg('info','Joined <b>'+esc(j.ssid)+'</b>. Checking that flight data comes through&hellip;');setTimeout(poll,1000);return}
- if(j.state=='done'||j.state=='connected'){msg('ok','<b>You&rsquo;re connected.</b> Switch your phone back to your usual Wi-Fi. Settings live at <b>http://'+esc(j.host)+'/</b> (or tap the header on the radar for a QR code).');return}
+ if(j.state=='done'||j.state=='connected'){msg('ok','<b>You&rsquo;re connected.</b> Switch your phone back to your usual Wi-Fi. Settings live at <b>http://'+esc(j.ip||j.host)+'/</b>'+(j.ip?' (or http://'+esc(j.host)+'/ on computers and iPhones)':'')+'. The radar shows the address too: tap <b>MENU</b> on its screen.');return}
  msg('err',esc(j.error||'Could not connect.'));upd()}).catch(function(){
  if(++lost<6){setTimeout(poll,1500);return}
  msg('info','Your phone lost its connection to the radar. That usually means it worked &mdash; check the radar&rsquo;s screen.')})}
@@ -183,6 +183,10 @@ static const char kSettingsPage[] PROGMEM = R"HTML(<!doctype html>
  <button id="nadd" type="button" style="margin-top:10px">Add network</button>
  <div class="hint">The radar joins the strongest saved network in range and switches when one drops out. It keeps up to 8; adding another forgets the one used longest ago. Passwords are never shown here. Holding the screen for 5&nbsp;seconds forgets all of them and starts phone setup.</div>
 </div>
+<h2>Firmware</h2><div class="card">
+ <p>Version <b id="fwv">&hellip;</b> &middot; <a href="/update" style="color:var(--cyan)">Update firmware</a></p>
+ <div class="hint">Updates need the update password, shown on the radar: tap <b>MENU</b>, then <b>Settings on phone</b>.</div>
+</div>
 <div id="toast"></div>
 </main><script>
 var S={},RANGES=%RANGES%,NUM=['observerAltFt','brightness','idleDimS','idleBrightness','blackoutS','landingWakeMin','wakeRangeNm','nightStartH','nightEndH','nightBrightness','refreshS'];
@@ -201,6 +205,7 @@ function fill(s){S=s;var set=Math.abs(s.observerLat-s.centerLat)>1e-6||Math.abs(
  $('source').value=s.source;$('screenRotation').value=s.screenRotation;$('northUp').value=s.northUp?1:0;$('nightMode').value=s.nightMode;
  $('alerts').checked=!!s.alerts;$('face').value=s.viewBearingDeg<0?'auto':'fixed';$('viewBearingDeg').value=s.viewBearingDeg<0?'':s.viewBearingDeg;hint()}
 function status(){fetch('/api/status').then(function(r){return r.json()}).then(function(j){
+ $('fwv').textContent=j.version+(j.otaPending?' (new, confirming)':'');
  $('status').textContent=j.aircraft+' aircraft \u00b7 '+(j.feedOk?j.source+' live':'data unavailable'+(j.feedError?' ('+j.feedError+')':''))+' \u00b7 '+j.ssid+' '+j.rssi+' dBm \u00b7 v'+j.version}).catch(function(){})}
 $('face').onchange=hint;$('obs').oninput=hint;$('ctr').oninput=hint;
 $('f').onsubmit=function(e){e.preventDefault();var c=pair($('ctr').value),ov=$('obs').value.trim(),o=ov?pair(ov):c;
@@ -231,6 +236,63 @@ $('nadd').onclick=function(){var s=$('nssid').value,p=$('npass').value;if(!s){to
  post('/api/networks',{ssid:s,pass:p}).then(function(j){showNets(j);$('nssid').value='';$('npass').value='';toast('Saved '+s)}).catch(function(j){toast((j&&j.error)||'Failed')})};
 fetch('/api/settings').then(function(r){return r.json()}).then(fill);status();setInterval(status,5000);nets();seen();setInterval(nets,15000);
 </script></body></html>
+)HTML";
+
+static const char kUpdatePage[] PROGMEM = R"HTML(<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kona Radar firmware</title>
+<style>)HTML" RADAR_PAGE_STYLE R"HTML(
+.bar{height:10px;border-radius:5px;background:#000;border:1px solid var(--line);overflow:hidden;margin-top:14px;display:none}
+.bar div{height:100%;width:0;background:var(--cyan)}
+input[type=file]{padding:10px}
+</style></head><body><main>
+<span class="eyebrow">KONA RADAR</span>
+<h1>Firmware update</h1>
+<p class="sub">Running <b>%VERSION%</b> (slot %SLOT%). <a href="/" style="color:var(--cyan)">Back to settings</a></p>
+<h2>Upload</h2><div class="card">
+ <label for="file">Firmware file (<code>.pio/build/kona-radar/firmware.bin</code>)</label>
+ <input id="file" type="file" accept=".bin,application/octet-stream">
+ <label for="pw">Update password</label>
+ <input id="pw" type="password" autocomplete="current-password" autocapitalize="none" spellcheck="false">
+ <div class="hint">Shown on the radar: tap <b>MENU</b>, then <b>Settings on phone</b>.</div>
+ <button class="main" id="go" type="button">Install</button>
+ <div class="bar" id="bar"><div id="fill"></div></div>
+ <div id="m" class="msg"></div>
+ <div class="hint">The radar checks the file before switching to it. If the new firmware does not start properly, the radar goes back to the current one on its next restart.</div>
+</div>
+<h2>Change the update password</h2><div class="card">
+ <label for="cur">Current password</label><input id="cur" type="password" autocomplete="current-password">
+ <label for="np">New password (8&ndash;32 characters, no spaces)</label><input id="np" type="password" autocomplete="new-password">
+ <button id="chg" type="button" style="margin-top:12px">Change password</button>
+ <div id="m2" class="msg"></div>
+</div>
+<script>
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function msg(id,k,h){var e=$(id);e.className='msg '+k;e.innerHTML=h}
+function err(x){try{return JSON.parse(x.responseText).error}catch(e){return 'The radar did not answer.'}}
+$('go').onclick=function(){var f=$('file').files[0];
+ if(!f){msg('m','err','Choose the firmware file first.');return}
+ if(!/\.bin$/i.test(f.name)){msg('m','err','The file should end in .bin.');return}
+ var x=new XMLHttpRequest(),d=new FormData();d.append('firmware',f,f.name);
+ x.open('POST','/update');x.setRequestHeader('X-Ota-Password',$('pw').value);x.setRequestHeader('X-Ota-Size',f.size);
+ $('go').disabled=true;$('bar').style.display='block';msg('m','info','Uploading&hellip; keep this page open.');
+ x.upload.onprogress=function(e){if(e.lengthComputable)$('fill').style.width=(100*e.loaded/e.total).toFixed(0)+'%'};
+ x.onload=function(){$('go').disabled=false;
+  if(x.status!=200){$('bar').style.display='none';msg('m','err',esc(err(x)));return}
+  $('fill').style.width='100%';msg('m','info','Installed. The radar is restarting&hellip;');setTimeout(back,4000)};
+ x.onerror=function(){$('go').disabled=false;msg('m','err','The upload was interrupted. Check the Wi-Fi and try again.')};
+ x.send(d)};
+var tries=0;
+function back(){fetch('/api/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+ msg('m','ok','Done &mdash; the radar now runs <b>'+esc(j.version)+'</b>.'+(j.otaPending?' It confirms the update after about 20 seconds online.':''))
+}).catch(function(){if(++tries<30)setTimeout(back,2000);else msg('m','err','The radar has not come back yet. Look at its screen.')})}
+$('chg').onclick=function(){var b=new URLSearchParams();b.append('current',$('cur').value);b.append('new',$('np').value);
+ fetch('/api/ota/password',{method:'POST',body:b}).then(function(r){return r.json().then(function(j){
+  if(r.ok){msg('m2','ok','Password changed. The radar shows the new one.');$('cur').value=$('np').value='';}
+  else msg('m2','err',esc(j.error||'Failed'))})}).catch(function(){msg('m2','err','The radar did not answer.')})};
+</script></main></body></html>
 )HTML";
 
 #undef RADAR_PAGE_STYLE

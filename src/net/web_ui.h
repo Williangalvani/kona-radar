@@ -15,6 +15,7 @@
 namespace net {
 
 class WifiManager;
+class Ota;
 
 class WebUi {
  public:
@@ -27,7 +28,7 @@ class WebUi {
     std::function<String()> statusJson;
   };
 
-  void begin(WifiManager* wifi, Hooks hooks);
+  void begin(WifiManager* wifi, Ota* ota, Hooks hooks);
   void loop();
 
  private:
@@ -41,12 +42,22 @@ class WebUi {
   void handlePostSettings();
   void handleReset();
   void handleStatus();
+  void handleUpdatePage();
+  void handleUpdateUpload();
+  void handleUpdateDone();
+  void handleOtaPassword();
+  bool passwordThrottled();
   void handleNetworksAdd();
   void handleNetworksRemove();
   void handleNotFound();
 
   WebServer server_{80};
   WifiManager* wifi_ = nullptr;
+  Ota* ota_ = nullptr;
+  // State of the /update request being received.
+  String uploadError_;
+  int uploadCode_ = 0;
+  uint32_t badPasswordMs_ = 0;
   Hooks hooks_;
   bool mdnsStarted_ = false;
 };

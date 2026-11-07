@@ -11,6 +11,10 @@ namespace {
 
 constexpr int kTapMovePx = 18;
 constexpr int kSwipePx = 45;
+// Up/down swipes switch night colors / the quiet screen, so they need a
+// longer, clearly vertical stroke than the sideways zoom.
+constexpr int kSwipeVerticalPx = 80;
+constexpr uint32_t kToastMs = 3500;
 constexpr uint32_t kTapMaxMs = 700;
 constexpr uint32_t kHoldShowMs = 800;
 
@@ -43,10 +47,12 @@ void Ui::build() {
   setNightPalette(night_);
   if (stage_) lv_obj_del(stage_);
   if (hold_) lv_obj_del(hold_);
+  if (toast_) lv_obj_del(toast_);
+  toast_ = nullptr;
   stage_ = screenRoot(lv_scr_act());
   lv_obj_set_pos(stage_, static_cast<lv_coord_t>(shiftX_), static_cast<lv_coord_t>(shiftY_));
-  Screen* all[] = {&splash_, &setupQr_, &link_, &connecting_, &result_, &radar_,
-                   &detail_, &alert_, &idle_, &alignment_};
+  Screen* all[] = {&splash_, &setupQr_, &link_, &connecting_, &result_, &radar_, &detail_,
+                   &alert_, &idle_, &alignment_, &menu_, &guide_, &update_};
   for (Screen* s : all) {
     s->bind(actions_, this);
     s->build(stage_);
@@ -78,6 +84,45 @@ void Ui::build() {
   holdHint_.set("RELEASE TO CANCEL");
   lv_obj_add_flag(hold_, LV_OBJ_FLAG_HIDDEN);
   holdProgress_ = -1;
+  buildToast();
+}
+
+void Ui::buildToast() {
+  const Palette& p = palette();
+  toast_ = panel(lv_layer_top(), 93, 262, 373, 330, 14, p.panel, p.panelLine);
+  lv_obj_clear_flag(toast_, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  // Children sit inside the 1 px outline.
+  toastTitle_.create(toast_, 139, 11, font::bold(20), p.text);
+  toastSub_.create(toast_, 139, 42, font::mono(11), p.muted, Align::Center, 1);
+  toastSub_.setMaxWidth(260);
+  toastTitle_.set(toastTitleText_);
+  toastSub_.set(toastSubText_);
+  toastShown_ = true;
+  updateToast();
+}
+
+void Ui::updateToast() {
+  if (!toast_) return;
+  const bool show = haveModel_ && static_cast<int32_t>(toastUntilMs_ - m_.nowMs) > 0 && active_ != &idle_ &&
+                    active_ != &update_;
+  if (show == toastShown_) return;
+  toastShown_ = show;
+  if (show)
+    lv_obj_clear_flag(toast_, LV_OBJ_FLAG_HIDDEN);
+  else
+    lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
+}
+
+void Ui::notify(const std::string& title, const std::string& sub) {
+  toastTitleText_ = title;
+  toastSubText_ = sub;
+  toastUntilMs_ = m_.nowMs + kToastMs;
+  if (!toast_) return;
+  toastTitle_.set(title);
+  toastSub_.set(sub);
+  toastShown_ = false;
+  lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
+  updateToast();
 }
 
 void Ui::setPixelShift(int dx, int dy) {
@@ -88,6 +133,7 @@ void Ui::setPixelShift(int dx, int dy) {
 }
 
 Screen* Ui::route(const Model& m) {
+  if (m.otaProgress >= 0) return &update_;
   if (m.phase != Phase::Running) view_ = View::Radar;
   switch (m.phase) {
     case Phase::Boot:
@@ -108,10 +154,18 @@ Screen* Ui::route(const Model& m) {
       break;
   }
   if (m.idle || m.blackout) {
-    view_ = View::Radar;
+    if (view_ != View::Guide) view_ = View::Radar;
     return &idle_;
   }
   if (!m.alertHex.empty() && findTarget(m, m.alertHex)) return &alert_;
+  if (m.guidePending && !guideOffered_) {
+    guideOffered_ = true;
+    openGuide();
+  }
+  if (!radarSeen_ && view_ == View::Radar) {
+    radarSeen_ = true;
+    radar_.showHints();
+  }
   switch (view_) {
     case View::Detail:
       return &detail_;
@@ -119,6 +173,10 @@ Screen* Ui::route(const Model& m) {
       return &alignment_;
     case View::PhoneLink:
       return &link_;
+    case View::Menu:
+      return &menu_;
+    case View::Guide:
+      return &guide_;
     default:
       return &radar_;
   }
@@ -132,6 +190,7 @@ void Ui::update(const Model& m) {
     build();
   }
   pollTouch(m.nowMs);
+  if (guide_.finished()) closeGuide();
   Screen* s = route(m_);
   if (s != active_) {
     if (active_) active_->show(false);
@@ -139,6 +198,7 @@ void Ui::update(const Model& m) {
     active_ = s;
   }
   active_->refresh(m_);
+  updateToast();
 }
 
 void Ui::pollTouch(uint32_t now) {
@@ -185,7 +245,7 @@ void Ui::pollTouch(uint32_t now) {
   if (std::abs(dx) > kSwipePx && std::abs(dx) >= std::abs(dy)) {
     active_->swipe(dx < 0 ? Swipe::Left : Swipe::Right);
     if (active_ == &link_ && dx > 0) back();
-  } else if (std::abs(dy) > kSwipePx) {
+  } else if (std::abs(dy) > kSwipeVerticalPx && std::abs(dy) * 10 > std::abs(dx) * 13) {
     active_->swipe(dy < 0 ? Swipe::Up : Swipe::Down);
   } else if (!moved_ && now - downMs_ < kTapMaxMs) {
     if (active_ == &link_)
@@ -217,13 +277,39 @@ void Ui::openDetail(const std::string& hex) {
   view_ = View::Detail;
 }
 
-void Ui::openAlignment() { view_ = View::Alignment; }
+void Ui::openAlignment() {
+  from_ = view_ == View::Menu ? View::Menu : View::Radar;
+  view_ = View::Alignment;
+}
 
 void Ui::openPhoneLink() {
-  link_.showLink("http://" + (m_.lanIp.empty() ? m_.lanHost : m_.lanIp) + "/");
+  link_.showLink(true);
+  from_ = view_ == View::Menu ? View::Menu : View::Radar;
   view_ = View::PhoneLink;
 }
 
-void Ui::back() { view_ = View::Radar; }
+void Ui::openMenu() {
+  from_ = View::Radar;
+  view_ = View::Menu;
+}
+
+void Ui::openGuide() {
+  guide_.restart();
+  from_ = View::Radar;
+  view_ = View::Guide;
+}
+
+void Ui::closeGuide() {
+  guide_.restart();
+  if (actions_) actions_->guideDone();
+  view_ = View::Radar;
+  radar_.showHints();
+}
+
+void Ui::back() {
+  const bool sub = view_ == View::Alignment || view_ == View::PhoneLink;
+  view_ = sub ? from_ : View::Radar;
+  from_ = View::Radar;
+}
 
 }  // namespace ui

@@ -50,6 +50,13 @@ struct Model {
   bool online = false;
   std::string lanIp;       // "192.168.1.23" when online
   std::string lanHost;     // "kona-radar.local"
+  bool ipNotice = false;   // just connected: show the address for a moment
+
+  // Device
+  std::string firmwareVersion;  // "2.1.0"
+  std::string otaPassword;      // firmware-update password (shown on the device only)
+  int otaProgress = -1;         // 0..100 while a firmware update is received
+  bool guidePending = false;    // first run: the gesture guide was never closed
 
   // Data feed
   bool feedEverOk = false;
@@ -82,6 +89,7 @@ class Actions {
   virtual void retrySetup() = 0;       // "TRY AGAIN" / set up Wi-Fi again
   virtual void resetWifi() = 0;        // 5 s hold: forget Wi-Fi, start setup
   virtual void dismissAlert(const char* hex) = 0;
+  virtual void guideDone() = 0;        // the gesture guide was closed
 };
 
 }  // namespace ui

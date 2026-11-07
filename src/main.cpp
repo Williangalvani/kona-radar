@@ -21,6 +21,7 @@
 #include "hal/touch_ft3168.h"
 #include "landing_wake.h"
 #include "net/adsb_client.h"
+#include "net/ota.h"
 #include "net/web_ui.h"
 #include "net/wifi_manager.h"
 #include "tracker.h"
@@ -40,6 +41,7 @@ app::SettingsStore g_store;
 net::WifiManager g_wifi;
 net::AdsbClient g_adsb;
 net::WebUi g_web;
+net::Ota g_ota;
 radar::Tracker g_tracker;
 radar::Settings g_settings;
 ui::Ui g_ui;
@@ -74,6 +76,10 @@ bool g_bootHandled = false;
 bool g_ntpStarted = false;
 bool g_radarOpened = false;
 bool g_uiOk = false;
+bool g_guidePending = false;
+bool g_wasOnline = false;
+uint32_t g_onlineSinceMs = 0;
+constexpr uint32_t kIpNoticeMs = 20000;
 uint32_t g_lastExpireMs = 0;
 uint32_t g_lastStatsMs = 0;
 
@@ -155,6 +161,11 @@ class AppActions : public ui::Actions {
   }
   void dismissAlert(const char* hex) override {
     if (g_alertHex == hex) g_alertHex.clear();
+  }
+  void guideDone() override {
+    if (!g_guidePending) return;
+    g_guidePending = false;
+    g_store.setGuideSeen(true);
   }
 };
 AppActions g_actions;
@@ -348,6 +359,12 @@ String statusJson() {
   }
   s += "\",\"rssi\":";
   s += WiFi.RSSI();
+  s += ",\"ip\":\"";
+  s += g_wifi.localIp();
+  s += "\",\"slot\":\"";
+  s += g_ota.runningPartition();
+  s += "\",\"otaPending\":";
+  s += g_ota.pendingVerify() ? "true" : "false";
   s += ",\"panel\":\"";
   s += g_panel.name();
   s += "\",\"uptimeS\":";
@@ -375,6 +392,11 @@ void fillModel(uint32_t now) {
   m.savedNetworks = static_cast<int>(g_wifi.savedCount());
   m.lanIp = g_wifi.localIp().c_str();
   m.lanHost = std::string(RADAR_HOSTNAME) + ".local";
+  m.ipNotice = m.online && g_onlineSinceMs && now - g_onlineSinceMs < kIpNoticeMs;
+  m.firmwareVersion = RADAR_FW_VERSION;
+  m.otaPassword = g_ota.password().c_str();
+  m.otaProgress = g_ota.progress();
+  m.guidePending = g_guidePending;
 
   const net::FeedStatus st = g_adsb.status();
   m.feedEverOk = st.everOk;
@@ -392,6 +414,24 @@ void fillModel(uint32_t now) {
   m.summary = g_summary;
 }
 
+// Updates block the main loop while they run, so the progress screen is
+// drawn from here.
+void onOtaProgress(int pct) {
+  if (!g_uiOk) return;
+  const uint32_t now = millis();
+  wakeUp(now);
+  g_blackout = g_idle = false;
+  int level = g_settings.brightness;
+  if (g_night) level = std::min<int>(level, g_settings.nightBrightness);
+  g_shownBrightness = level;
+  g_appliedBrightness = level;
+  g_panel.setBrightness(static_cast<uint8_t>(level));
+  fillModel(now);
+  g_model.otaProgress = pct;
+  g_ui.update(g_model);
+  lv_timer_handler();
+}
+
 }  // namespace
 
 void setup() {
@@ -400,6 +440,7 @@ void setup() {
   pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
 
   g_settings = g_store.load();
+  g_guidePending = !g_store.guideSeen();
 
   if (!hal::lvglPortBegin(g_panel, g_touch)) {
     log_e("display init failed; running without a screen");
@@ -435,6 +476,7 @@ void setup() {
     lv_timer_handler();
   }
 
+  g_ota.begin(&g_store, onOtaProgress);
   g_wifi.begin(&g_store);
   net::WebUi::Hooks hooks;
   hooks.getSettings = [] { return g_settings; };
@@ -444,7 +486,7 @@ void setup() {
     applySettings(radar::Settings::defaults(), 0, false);
   };
   hooks.statusJson = statusJson;
-  g_web.begin(&g_wifi, hooks);
+  g_web.begin(&g_wifi, &g_ota, hooks);
 
   configureFeed();
   g_adsb.begin();
@@ -456,6 +498,13 @@ void loop() {
   const uint32_t now = millis();
   g_wifi.loop();
   g_web.loop();
+  g_ota.loop(g_wifi.online(), g_wifi.portalActive());
+  const bool online = g_wifi.online();
+  if (online && !g_wasOnline) {
+    g_onlineSinceMs = now ? now : 1;
+    log_i("online: http://%s/ (http://" RADAR_HOSTNAME ".local/)", g_wifi.localIp().c_str());
+  }
+  g_wasOnline = online;
   g_store.loop();
   pollBootButton(now);
 
