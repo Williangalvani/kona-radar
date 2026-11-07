@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <unity.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -555,6 +556,117 @@ void test_rotation_consistency() {
   }
 }
 
+// Where the picture's top-left corner ends up on the panel, and where a
+// finger on that spot is reported: rot turns the picture clockwise.
+void test_touch_mapping_per_rotation() {
+  const int W = 466, H = 466;
+  const int cornerRaw[4][2] = {{0, 0}, {465, 0}, {465, 465}, {0, 465}};
+  for (uint8_t rot = 0; rot < 4; ++rot) {
+    int x, y;
+    touchToLogical(rot, W, H, cornerRaw[rot][0], cornerRaw[rot][1], x, y);
+    TEST_ASSERT_EQUAL(0, x);
+    TEST_ASSERT_EQUAL(0, y);
+    // The next corner clockwise on the panel is the picture's top-right.
+    const int* next = cornerRaw[(rot + 1) & 3];
+    touchToLogical(rot, W, H, next[0], next[1], x, y);
+    TEST_ASSERT_EQUAL(465, x);
+    TEST_ASSERT_EQUAL(0, y);
+    // Reports past the edge stay on the screen.
+    const int raw[][2] = {{466, 466}, {-3, 470}, {500, -1}};
+    for (const auto& r : raw) {
+      touchToLogical(rot, W, H, r[0], r[1], x, y);
+      TEST_ASSERT_TRUE(x >= 0 && x < W && y >= 0 && y < H);
+    }
+  }
+  // A tap on the MENU tag (374, 127) as the viewer sees it, at 90 degrees.
+  int px, py, x, y;
+  rotatePoint(1, W, H, 374, 127, px, py);
+  TEST_ASSERT_EQUAL(338, px);
+  TEST_ASSERT_EQUAL(374, py);
+  touchToLogical(1, W, H, px, py, x, y);
+  TEST_ASSERT_EQUAL(374, x);
+  TEST_ASSERT_EQUAL(127, y);
+}
+
+void test_swipes_follow_rotation() {
+  const int W = 466, H = 466;
+  struct Case {
+    int x0, y0, x1, y1;
+    Stroke want;
+  };
+  // Strokes as the viewer draws them on the (rotated) picture.
+  const Case cases[] = {
+      {150, 250, 330, 250, Stroke::Right}, {330, 250, 150, 250, Stroke::Left},
+      {233, 300, 233, 150, Stroke::Up},    {233, 150, 233, 300, Stroke::Down},
+      {233, 300, 260, 245, Stroke::None},  {200, 200, 210, 205, Stroke::None},
+  };
+  for (uint8_t rot = 0; rot < 4; ++rot) {
+    for (const Case& c : cases) {
+      int r0x, r0y, r1x, r1y, a0x, a0y, a1x, a1y;
+      rotatePoint(rot, W, H, c.x0, c.y0, r0x, r0y);
+      rotatePoint(rot, W, H, c.x1, c.y1, r1x, r1y);
+      touchToLogical(rot, W, H, r0x, r0y, a0x, a0y);
+      touchToLogical(rot, W, H, r1x, r1y, a1x, a1y);
+      TEST_ASSERT_EQUAL(static_cast<int>(c.want), static_cast<int>(classifyStroke(a1x - a0x, a1y - a0y)));
+    }
+  }
+  // The same stroke along the panel's own x axis means a different thing
+  // to the viewer at each rotation.
+  const Stroke panelRight[4] = {Stroke::Right, Stroke::Up, Stroke::Left, Stroke::Down};
+  for (uint8_t rot = 0; rot < 4; ++rot) {
+    int ax, ay, bx, by;
+    touchToLogical(rot, W, H, 100, 233, ax, ay);
+    touchToLogical(rot, W, H, 366, 233, bx, by);
+    TEST_ASSERT_EQUAL(static_cast<int>(panelRight[rot]), static_cast<int>(classifyStroke(bx - ax, by - ay)));
+  }
+}
+
+// LVGL renders the screen in 466 x 32 strips (rounded to even start / odd
+// end). Rotated, every strip must stay 2x2 aligned for the CO5300, and the
+// strips must cover each panel pixel exactly once.
+void test_rotated_flush_covers_panel() {
+  const int W = 466, H = 466, kRows = 32;
+  static uint8_t hits[W * H];
+  static uint16_t src[W * kRows], scratch[W * kRows];
+  for (uint8_t rot = 0; rot < 4; ++rot) {
+    for (int k = 0; k < W * H; ++k) hits[k] = 0;
+    for (int y1 = 0; y1 < H; y1 += kRows) {
+      const int y2 = std::min(H - 1, y1 + kRows - 1);
+      for (int y = y1; y <= y2; ++y)
+        for (int x = 0; x < W; ++x) src[(y - y1) * W + x] = static_cast<uint16_t>(y * W + x);
+      const PanelBlock b = toPanel(rot, W, H, 0, y1, W - 1, y2, src, scratch);
+      TEST_ASSERT_EQUAL(0, b.x1 % 2);
+      TEST_ASSERT_EQUAL(0, b.y1 % 2);
+      TEST_ASSERT_EQUAL(1, b.x2 % 2);
+      TEST_ASSERT_EQUAL(1, b.y2 % 2);
+      TEST_ASSERT_TRUE(b.x1 >= 0 && b.y1 >= 0 && b.x2 < W && b.y2 < H);
+      TEST_ASSERT_TRUE(rot == 0 ? b.pixels == src : b.pixels == scratch);
+      const int bw = b.x2 - b.x1 + 1;
+      for (int py = b.y1; py <= b.y2; ++py) {
+        for (int px = b.x1; px <= b.x2; ++px) {
+          ++hits[py * W + px];
+          // The pixel shown here is the logical pixel that maps to it.
+          int lx, ly;
+          unrotatePoint(rot, W, H, px, py, lx, ly);
+          TEST_ASSERT_EQUAL(static_cast<uint16_t>(ly * W + lx), b.pixels[(py - b.y1) * bw + (px - b.x1)]);
+        }
+      }
+    }
+    for (int k = 0; k < W * H; ++k) TEST_ASSERT_EQUAL(1, hits[k]);
+  }
+  // A small invalidated area (e.g. one label) keeps the alignment too.
+  for (uint8_t rot = 0; rot < 4; ++rot) {
+    for (int x1 = 0; x1 < 60; x1 += 2) {
+      int ox1, oy1, ox2, oy2;
+      rotateArea(rot, W, H, 100 + x1, 38, 100 + x1 + 2 * (x1 % 7) + 1, 61, ox1, oy1, ox2, oy2);
+      TEST_ASSERT_EQUAL(0, ox1 % 2);
+      TEST_ASSERT_EQUAL(0, oy1 % 2);
+      TEST_ASSERT_EQUAL(1, ox2 % 2);
+      TEST_ASSERT_EQUAL(1, oy2 % 2);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- settings
 
 void test_settings_defaults_and_json() {
@@ -677,6 +789,9 @@ int main(int, char**) {
   RUN_TEST(test_traffic_arrival_departure_cues);
   RUN_TEST(test_traffic_needs_history_and_fresh_data);
   RUN_TEST(test_rotation_consistency);
+  RUN_TEST(test_touch_mapping_per_rotation);
+  RUN_TEST(test_swipes_follow_rotation);
+  RUN_TEST(test_rotated_flush_covers_panel);
   RUN_TEST(test_settings_defaults_and_json);
   RUN_TEST(test_settings_diff_stores_only_changes);
   RUN_TEST(test_coastline_projects_onto_big_island);
