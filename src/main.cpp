@@ -324,8 +324,9 @@ String statusJson() {
     if (*p != '"' && *p != '\\') s += *p;
   }
   s += "\",\"ssid\":\"";
-  for (size_t i = 0; i < g_wifi.savedSsid().length(); ++i) {
-    const char c = g_wifi.savedSsid()[i];
+  const String ssid = g_wifi.currentSsid();
+  for (size_t i = 0; i < ssid.length(); ++i) {
+    const char c = ssid[i];
     if (c != '"' && c != '\\') s += c;
   }
   s += "\",\"rssi\":";
@@ -348,12 +349,13 @@ void fillModel(uint32_t now) {
   m.phase = phaseFor(g_wifi.state(), now);
   const net::WifiState ws = g_wifi.state();
   const bool trying = ws == net::WifiState::PortalTrying || ws == net::WifiState::PortalFailed;
-  m.wifiSsid = (trying && g_wifi.tryingSsid().length() ? g_wifi.tryingSsid() : g_wifi.savedSsid()).c_str();
+  m.wifiSsid = (trying && g_wifi.tryingSsid().length() ? g_wifi.tryingSsid() : g_wifi.currentSsid()).c_str();
   m.apSsid = g_wifi.apSsid().c_str();
   m.apPassword = g_wifi.apPassword().c_str();
   m.portalIp = net::WifiManager::kPortalIp;
   m.setupFailure = failureFor(g_wifi.setupError());
   m.online = g_wifi.online();
+  m.savedNetworks = static_cast<int>(g_wifi.savedCount());
   m.lanIp = g_wifi.localIp().c_str();
   m.lanHost = std::string(RADAR_HOSTNAME) + ".local";
 

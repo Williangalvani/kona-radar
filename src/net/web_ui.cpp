@@ -70,6 +70,9 @@ void WebUi::begin(WifiManager* wifi, Hooks hooks) {
   server_.on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
   server_.on("/api/reset", HTTP_POST, [this] { handleReset(); });
   server_.on("/api/status", HTTP_GET, [this] { handleStatus(); });
+  server_.on("/api/networks", HTTP_GET, [this] { sendJson(200, wifi_->networksJson()); });
+  server_.on("/api/networks", HTTP_POST, [this] { handleNetworksAdd(); });
+  server_.on("/api/networks/remove", HTTP_POST, [this] { handleNetworksRemove(); });
   server_.onNotFound([this] { handleNotFound(); });
   server_.begin();
 }
@@ -142,7 +145,7 @@ void WebUi::handleWifiStatus() {
       break;
   }
   String body = String("{\"state\":\"") + state + "\",\"ssid\":\"" +
-                jsonEscape(wifi_->state() == WifiState::PortalTrying ? wifi_->tryingSsid() : wifi_->savedSsid()) +
+                jsonEscape(wifi_->state() == WifiState::PortalTrying ? wifi_->tryingSsid() : wifi_->currentSsid()) +
                 "\",\"error\":\"" + jsonEscape(wifi_->lastError()) + "\",\"host\":\"" RADAR_HOSTNAME ".local\"}";
   sendJson(200, body);
 }
@@ -185,6 +188,23 @@ void WebUi::handleReset() {
 }
 
 void WebUi::handleStatus() { sendJson(200, hooks_.statusJson()); }
+
+void WebUi::handleNetworksAdd() {
+  String err;
+  if (!wifi_->addNetwork(server_.arg("ssid"), server_.arg("pass"), err)) {
+    sendJson(400, String("{\"error\":\"") + jsonEscape(err) + "\"}");
+    return;
+  }
+  sendJson(200, wifi_->networksJson());
+}
+
+void WebUi::handleNetworksRemove() {
+  if (!wifi_->removeNetwork(server_.arg("ssid"))) {
+    sendJson(404, "{\"error\":\"That network is not saved.\"}");
+    return;
+  }
+  sendJson(200, wifi_->networksJson());
+}
 
 void WebUi::handleNotFound() {
   if (redirectToPortal()) return;

@@ -41,7 +41,8 @@ struct Model {
   uint32_t nowMs = 0;
 
   // Wi-Fi
-  std::string wifiSsid;    // saved network, or the one being set up
+  std::string wifiSsid;    // current/last network, or the one being set up
+  int savedNetworks = 0;
   std::string apSsid;      // setup network name ("Kona-Radar-7A2C")
   std::string apPassword;  // setup network password ("look-up-7412")
   std::string portalIp;    // "192.168.4.1"

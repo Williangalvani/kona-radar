@@ -6,6 +6,17 @@
 #include "theme.h"
 
 namespace ui {
+namespace {
+
+// At most 17 bytes plus an ellipsis, cut on a UTF-8 character boundary.
+std::string shortSsid(const std::string& s) {
+  if (s.size() <= 18) return s;
+  size_t n = 17;
+  while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
+  return s.substr(0, n) + "\xE2\x80\xA6";
+}
+
+}  // namespace
 
 void Screen::show(bool on) {
   if (!root_ || on == visible_) return;
@@ -241,7 +252,10 @@ void ResultScreen::refresh(const Model& m) {
   if (m.phase == Phase::Offline) {
     setKind(Kind::Offline);
     heading_.set("Wi-Fi not found");
-    line1_.set("Can\xE2\x80\x99t reach " + (m.wifiSsid.size() > 18 ? m.wifiSsid.substr(0, 17) + "\xE2\x80\xA6" : m.wifiSsid) + ".");
+    if (m.savedNetworks > 1)
+      line1_.set("None of " + std::to_string(m.savedNetworks) + " saved networks found.");
+    else
+      line1_.set("Can\xE2\x80\x99t reach " + shortSsid(m.wifiSsid) + ".");
     line2_.set("Still trying in the background.");
     return;
   }

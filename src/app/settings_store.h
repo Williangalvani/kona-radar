@@ -1,9 +1,12 @@
-// NVS persistence for radar::Settings (stored as one JSON blob) and the
-// Wi-Fi credentials.
+// NVS persistence: radar::Settings (one JSON blob of the changed fields), the
+// saved Wi-Fi networks, and per-device secrets (setup network and OTA
+// passwords). Missing namespaces and keys are normal on first boot and are
+// not logged.
 #pragma once
 
 #include <Arduino.h>
 
+#include "known_networks.h"
 #include "settings.h"
 
 namespace app {
@@ -19,12 +22,22 @@ class SettingsStore {
   void loop();
   void resetToDefaults();
 
-  bool loadWifi(String& ssid, String& pass);
-  void saveWifi(const String& ssid, const String& pass);
-  void forgetWifi();
+  // Saved Wi-Fi networks. A single network saved by firmware 2.0 and older is
+  // moved into the list on first load.
+  radar::KnownNetworks loadNetworks();
+  void saveNetworks(const radar::KnownNetworks& n);
+  void forgetNetworks();
+
   // Setup-network password, created randomly on first use and kept across
   // Wi-Fi resets so the printed/remembered QR code stays valid.
   String setupPassword();
+  // Password for firmware updates (web page and espota), random per device.
+  String otaPassword();
+  void setOtaPassword(const String& pass);
+
+  // The first-run gesture guide was dismissed.
+  bool guideSeen();
+  void setGuideSeen(bool seen);
 
  private:
   void writeNow();
