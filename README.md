@@ -5,14 +5,16 @@ ESP32-S3-Touch-AMOLED-1.43**. It hangs on a balcony with a view of Kona
 International Airport (KOA) and shows nearby aircraft, using free public ADS-B
 data over Wi-Fi. The scope is centered on **you**, and the top of the screen
 is the direction you face, so an aircraft drawn up and to the right is up and
-to the right when you look out. When an arrival is about a minute from
-landing, the screen says which way to look.
+to the right when you look out. The screen wakes when a plane is about to
+land, and when it is about a minute out the screen says which way to look.
 
 | Radar (view up, 10 NM) | 5 NM, departure selected | Aircraft detail | Look-up alert |
 | --- | --- | --- | --- |
 | ![radar](docs/img/06_radar_view_aligned.png) | ![zoom](docs/img/07_radar_zoom_5nm.png) | ![detail](docs/img/08_aircraft_detail.png) | ![alert](docs/img/09_look_up_alert.png) |
 | **Phone setup** | **Night** | **Quiet idle** | **Balcony alignment** |
 | ![setup](docs/img/02_wifi_setup_qr.png) | ![night](docs/img/10_night_mode.png) | ![idle](docs/img/11_idle_dim.png) | ![alignment](docs/img/12_balcony_alignment.png) |
+| **Menu** | **Gesture guide** | **Settings on phone (by IP)** | **Firmware update** |
+| ![menu](docs/img/18_menu.png) | ![guide](docs/img/19b_guide_swipe.png) | ![link](docs/img/13_phone_settings_link.png) | ![update](docs/img/23_firmware_update.png) |
 
 *These are screenshots from the host simulator, which runs the real UI code
 with the design's example traffic around a made-up observer. The gray
@@ -27,6 +29,7 @@ corners are outside the round panel. The UI follows the design in
 - [Flight cues](#flight-cues)
 - [Data source](#data-source)
 - [Configuration](#configuration)
+- [Firmware updates over Wi-Fi](#firmware-updates-over-wi-fi)
 - [AMOLED burn-in protection](#amoled-burn-in-protection)
 - [Code layout and the UI design](#code-layout-and-the-ui-design)
 - [Tests and simulator](#tests-and-simulator)
@@ -43,9 +46,45 @@ official demo package (`ESP32-S3-AMOLED-1.43-Demo`, `Arduino/examples/07_LVGL_Te
 | Part | What the firmware does |
 | --- | --- |
 | 1.43" 466×466 AMOLED, QSPI | Waveshare ships this board with **either an SH8601 or a CO5300** controller. At boot the firmware reads ID register `0xDA` over bit-banged SPI, as Waveshare's demo does. `0x86` means SH8601; anything else means CO5300, which needs a 6-pixel column offset. Pins: CS 9, SCLK 10, D0–D3 11–14, RST 21, AMOLED_EN 42. The pixel clock is 40 MHz. The driver is Espressif's `esp_lcd_sh8601` (vendored), which handles both controllers. |
-| FT3168 capacitive touch, I2C `0x38` | Polled over the shared I2C bus on SDA 47 / SCL 48. The board does not wire up the touch interrupt. |
+| FT3168 capacitive touch, I2C `0x38` | Polled at 400 kHz on SDA 47 / SCL 48. Touch INT and RST are not connected to the ESP32. See [Touch notes](#touch-notes). |
 | QMI8658 IMU, PCF85063 RTC, ETA6098 PMIC, microSD | Not used yet. The clock comes from NTP. |
 | BOOT button (GPIO 0) | Hold it for 5 s while running to reset Wi-Fi, the same as holding the screen. |
+
+### Touch notes
+
+These findings come from Waveshare's demo package V3
+(`ESP-IDF/07_LVGL_Test/components/touch_bsp/touch_bsp.c`,
+`Arduino/examples/07_LVGL_Test/FT3168.cpp`, `lcd_config.h`), the board
+schematic (`ESP32-S3-Touch-AMOLED-1.43-Schematic.pdf`, connector J9), and the
+FocalTech `DATA_SHEET_FT3168.pdf`:
+
+- **Controller and pins.** The controller is an FT3168 at `0x38` on SDA 47 /
+  SCL 48, the same bus as the RTC (`0x51`) and the IMU (`0x6B`). The touch
+  INT and RST pins on J9 are not connected: both demos use −1, there is no
+  IO expander, and the controller is powered from 3V3 with 10 kΩ pull-ups.
+  Panel enable (`OLED_EN`, R9) is not fitted either.
+- **Start-up order.** The controller needs at least 70 ms after power-up
+  (datasheet Tpon) and 5 ms after reset. Waveshare's IDF demo starts touch
+  after the panel, and the firmware does the same.
+- **Why it went missing.** In *Monitor* (low-power) mode the FT3168 stops
+  answering I2C until it is touched, especially after traffic to other
+  addresses on the bus (datasheet §2.3). Arduino's `Wire` on IDF 5.5 reports
+  that NACK as `ESP_ERR_INVALID_STATE` / `Error 259`. That explains both
+  `FT3168 touch not responding at 0x38` on the first boot and the errors about
+  12 s in, when the chip had dozed off.
+
+What the firmware does about it:
+
+- It uses its own thread-safe I2C bus (`src/hal/i2c_bus.*`, IDF
+  `i2c_master` with a mutex) rather than `Wire`.
+- It probes `0x38`, then `0x15` (CST816) as a fallback. If the controller
+  isn't there, it resets the panel module once and tries again.
+- Once found, it writes *stay active* (`0x86 = 0`, `0xA5 = 0`) and logs the
+  chip, firmware and vendor IDs.
+- It logs an I2C scan at boot, after the touch controller is configured.
+- If the controller drops out, it re-probes every 100 ms and re-applies the
+  settings every 10 s. It warns at most once a minute instead of flooding
+  the log.
 
 Graphics use **LVGL 8.4** with two 466×32-line DMA buffers in internal RAM.
 The controller has no rotation hardware, so rotation is done in software in the
@@ -68,6 +107,9 @@ orientation changes. Text uses IBM Plex fonts converted to 4-bit LVGL bitmaps.
    If the upload can't find the board or fails to connect, put it in download
    mode: hold **BOOT**, tap **RST**, release **BOOT**, then run the upload again.
    Press **RST** once flashing finishes.
+
+After this first USB flash, later updates can go over Wi-Fi (see
+[Firmware updates over Wi-Fi](#firmware-updates-over-wi-fi)).
 
 The build uses the [pioarduino](https://github.com/pioarduino/platform-espressif32)
 platform 55.03.312 (Arduino-ESP32 3.3.12 on ESP-IDF 5.5) and a board definition
@@ -102,13 +144,35 @@ Nothing to install: it only takes a phone camera.
    - **No internet**: the Wi-Fi password was right and is saved, but no
      flight data came through. **TRY AGAIN** checks again.
 6. Your phone goes back to its usual Wi-Fi. The radar remembers the network
-   and reconnects by itself after power cuts or router restarts.
+   and reconnects by itself after power cuts or router restarts. The
+   **You're connected** screen and the radar's footer (for 20 s) show its IP
+   address.
 
-**Changing networks later: hold anywhere on the screen for 5 seconds**, or
-hold the BOOT button. A ring fills up while you hold, and letting go cancels.
-This forgets *only* the Wi-Fi; your location, view and display settings stay.
-If the saved network can't be reached after power-on, the radar shows **Wi-Fi
-not found**, keeps retrying in the background, and offers **SET UP WI-FI**.
+### Several networks
+
+The radar remembers **up to 8 networks**, for example home, a hotspot and
+the neighbor's guest Wi-Fi:
+- At power-on it scans and joins the **strongest saved network in range**.
+  If that fails it tries the next one; networks not seen in the scan are
+  tried last.
+- If the connection drops and doesn't come back within a few seconds, it
+  scans again and moves to another saved network. When none works it keeps
+  retrying, backing off from 10 s to a minute.
+- **Phone setup adds a network** to the list; it never replaces the others.
+  If setup was opened by mistake while networks are saved, it closes again
+  after 5 minutes without a phone and goes back to them.
+- The settings page lists the saved networks with signal strength and which
+  one is in use. You can remove them or add new ones; nearby networks are
+  suggested. Passwords are never shown or sent back.
+- A network saved by firmware 2.0 or older is moved into the list
+  automatically.
+
+**Starting over: hold anywhere on the screen for 5 seconds**, or hold the BOOT
+button. A ring fills up while you hold, and letting go cancels. This forgets
+*all* saved Wi-Fi networks and opens phone setup; your location, view and
+display settings stay. If no saved network can be reached after power-on,
+the radar shows **Wi-Fi not found**, keeps retrying in the background, and
+offers **SET UP WI-FI**.
 
 ![hold to reset](docs/img/14_hold_to_reset_wifi.png)
 
@@ -173,9 +237,10 @@ There are three ways to give the radar its real location. None of them
 involves committing it to the repository:
 
 1. **During Wi-Fi setup**, in the optional *Your balcony* step of the portal.
-2. **Any time later** on the settings page at `http://kona-radar.local/`. On
-   the radar, tap the title to open the alignment screen, then tap *TAP HERE
-   TO EDIT ON PHONE* for a QR code with the page's address.
+2. **Any time later** on the settings page. On the radar, tap **MENU**, then
+   **Settings on phone**, for a QR code with the page's address
+   (`http://<ip>/`; Android phones don't resolve `kona-radar.local`). The
+   alignment screen's *TAP HERE TO EDIT ON PHONE* opens the same page.
 3. **At build time**, for your own builds only:
 
    ```bash
@@ -208,8 +273,25 @@ placeholder.
 
 ## Using the radar
 
+On first start a three-page **gesture guide** explains the taps and swipes.
+Tap to go through it. It can be reopened from **MENU › Gestures guide**.
+
+The small **MENU** button at the top right is the way to everything that is
+otherwise a gesture:
+- **Settings on phone**: a QR code and the IP address, plus the firmware
+  update password.
+- **Balcony alignment**.
+- **Night colors**, on or off.
+- **Quiet screen**.
+- **Gestures guide**.
+
+The menu also shows the address and firmware version. For a few seconds
+after the guide, on the first radar view and after tapping empty sky, small
+hints at the screen edges show what the swipes do.
+
 | Where | Gesture | What happens |
 | --- | --- | --- |
+| **MENU** (top right) | tap | menu (see above); ‹ or swipe right goes back |
 | Range text (`· 10 NM`, right half of the header) | tap | 5 → 10 → 20 NM, wrapping |
 | Empty radar | swipe left / right | zoom out / in |
 | Title or `VIEW 260°T` (left half of the header) | tap | Balcony alignment: bearing, distance to the airport, **NORTH UP / VIEW UP** switch, and a QR code for the phone settings |
@@ -219,8 +301,8 @@ placeholder.
 | Empty sky | tap | back to the automatic focus (the next likely arrival) |
 | Detail / alignment | tap ‹ or swipe right | back to the radar |
 | Look-up alert | tap | dismiss and open that aircraft's detail |
-| Empty radar | swipe up | day ⇄ night colors (until the next scheduled change) |
-| Empty radar | swipe down | quiet idle screen; tap to wake |
+| Empty radar | swipe up (a long, clearly vertical stroke) | day ⇄ night colors until the next scheduled change; a notice says which, and swiping up again undoes it |
+| Empty radar | swipe down (long, vertical) | quiet idle screen; tap to wake |
 | Anywhere | hold 5 s | reset Wi-Fi only (see above) |
 
 On the scope:
@@ -277,6 +359,15 @@ not ATC data:
   for example `LOOK RIGHT · 47° from your balcony view`, with the true
   bearing underneath (`NW 307°T`). There is no compass on the board, so this
   relies on the facing bearing being right.
+- **Wake for landings.** When an aircraft is predicted to land within
+  **10 minutes** (settings page, 0 = off), the screen wakes. It wakes from
+  the quiet screen, from screen-off and from a swipe down, and stays on until
+  the aircraft lands. The wake happens once per aircraft, so swiping it quiet
+  again sticks until the next arrival. Night brightness still applies.
+  Beyond the 15 NM final-approach cue above, this uses a rougher **inbound**
+  estimate: not climbing, descending or already low for the distance, and
+  heading within 60° of the airport. The time is the distance plus a little
+  for joining the approach, at a little under the current ground speed.
 
 ## Data source
 
@@ -293,7 +384,9 @@ aggregators. No API key is used.
 **How the firmware uses them:**
 - Every 5 s by default (never faster than every 2 s), it requests a circle
   around the observer of twice the displayed range, at least 25 NM. That
-  covers the "+N outside" count and arrivals still well out on final.
+  covers the "+N outside" count and arrivals still well out on final. With
+  wake for landings on, the circle grows to about 4.5 NM per minute of the
+  window (50 NM for the default 10 minutes).
 - It runs in a background task on core 0 over HTTPS (with the built-in CA
   bundle) and reuses the connection between requests.
 - On HTTP 429 it waits 60 s. On other errors it backs off exponentially, up
@@ -316,9 +409,10 @@ anywhere around Kona would improve coverage for everyone.
 
 ### From a phone, no reflashing
 
-When the radar is online, open **`http://kona-radar.local/`** on a phone or
-computer on the same Wi-Fi. If `.local` names don't work on your device, use
-the QR code on the alignment screen, which also shows the IP address.
+When the radar is online, open **`http://<its IP>/`** on a phone or computer
+on the same Wi-Fi. Tap **MENU** on the radar for the address and a QR code.
+`http://kona-radar.local/` also works on Macs, iPhones and most computers,
+but many Android phones (Samsung included) don't resolve `.local` names.
 
 | Setting | Default |
 | --- | --- |
@@ -331,8 +425,11 @@ the QR code on the alignment screen, which also shows the IP address.
 | Brightness | 80% |
 | Quiet screen after / its brightness | 90 s / 40% |
 | Screen off after quiet for | 900 s |
-| Wake when a plane is within | 0 = only for arrivals |
-| Night colors | by the hours 19:00–06:00, night brightness 12% (or never / always) |
+| Wake for landings | 10 minutes before touchdown (0 = off) |
+| Also wake when any plane is within | 0 NM = off |
+| Night colors | by the hours 19:00–06:00, night brightness 35% (or never / always) |
+| Wi-Fi networks | list, add, remove (up to 8) |
+| Firmware | version, link to the update page |
 | Airport and label, data source, refresh | KOA 19.738765, −156.045631; adsb.fi; 5 s |
 
 Settings are stored in NVS flash and survive power cuts and firmware updates.
@@ -357,17 +454,58 @@ flags in `platformio.ini`, for example `-DRADAR_DEFAULT_RANGE_NM=20`.
 | `RADAR_DEFAULT_RANGE_NM` / `RADAR_RANGE_STEPS_NM` | 10 / {5, 10, 20} | Range |
 | `RADAR_REFRESH_INTERVAL_S` / `RADAR_PRIMARY_SOURCE` | 5 / 0 | Download interval; 0 adsb.fi, 1 adsb.lol |
 | `RADAR_STALE_MUTE_S` / `_NO_ETA_S` / `_AFTER_S` | 30 / 60 / 180 | Stale data handling |
-| `RADAR_ALERT_ETA_S` / `RADAR_IMMINENT_ETA_S` | 75 / 240 | Look-up alert; arrivals that keep the screen awake |
+| `RADAR_ALERT_ETA_S` | 75 | Look-up alert |
+| `RADAR_LANDING_WAKE_MIN` | 10 | Wake for a landing this many minutes out (runtime setting; 0 = off) |
 | `RADAR_DEFAULT_BRIGHTNESS` | 80 | Percent |
 | `RADAR_IDLE_DIM_S` / `RADAR_IDLE_BRIGHTNESS` / `RADAR_BLACKOUT_S` | 90 / 40 / 900 | Quiet screen and screen-off |
 | `RADAR_WAKE_RANGE_NM` | 0 | Also wake for any aircraft this close (0 = off) |
-| `RADAR_NIGHT_MODE` / `_START_H` / `_END_H` / `RADAR_NIGHT_BRIGHTNESS` | 0 / 19 / 6 / 12 | Night colors (0 by hours, 1 never, 2 always) |
+| `RADAR_NIGHT_MODE` / `_START_H` / `_END_H` / `RADAR_NIGHT_BRIGHTNESS` | 0 / 19 / 6 / 35 | Night colors (0 by hours, 1 never, 2 always) |
 | `RADAR_PIXEL_SHIFT_S` / `_MAX` | 60 / 2 | Burn-in pixel shift |
 | `RADAR_AP_PREFIX` / `RADAR_AP_PASS_PREFIX` / `RADAR_HOSTNAME` | "Kona-Radar" / "look-up-" / "kona-radar" | Setup network and mDNS name |
 | `RADAR_ONLINE_CHECK_S` / `RADAR_RESET_HOLD_S` | 30 / 5 | Setup internet check; hold time for the Wi-Fi reset |
 | `RADAR_TIMEZONE` | "HST10" | POSIX TZ for the night schedule |
 | `RADAR_PANEL_FORCE` | 0 | 0 auto-detect, 1 SH8601, 2 CO5300 |
 | `RADAR_LOG_FPS` | 0 | 1 = log display throughput and memory every 5 s |
+
+## Firmware updates over Wi-Fi
+
+Flash over USB once with this version. After that there are two ways to
+update over Wi-Fi, and both need the radar's **update password**:
+- It is 8 random digits, made on the device's first start and kept in NVS.
+- It is shown only on the device: **MENU**, and the **Settings on phone**
+  page.
+- You can change it on the update page (8–32 characters, no spaces).
+- It is deliberately not on the settings page, which anyone on the Wi-Fi can
+  open.
+
+**From a browser.** Open `http://<ip>/update` (linked from the settings
+page). Choose `.pio/build/kona-radar/firmware.bin`, enter the password and
+tap **Install**.
+- The page and the radar's screen both show progress.
+- The password is checked before anything is written to flash.
+- The file is checked before the radar switches to it: it must be an
+  ESP32-S3 app image, which rules out a merged or bootloader `.bin`, and its
+  SHA-256 must match.
+- The radar then restarts.
+
+**From PlatformIO** (espota):
+
+```bash
+KONA_RADAR_OTA_PASSWORD=12345678 pio run -e kona-radar-ota -t upload
+KONA_RADAR_OTA_PASSWORD=12345678 pio run -e kona-radar-ota -t upload --upload-port 192.168.1.42
+```
+
+`env:kona-radar-ota` builds the same firmware and uploads to
+`kona-radar.local:3232`. The password comes from the environment so it
+never lands in `platformio.ini`. Plain `pio run -t upload --upload-port <ip>`
+also switches to espota by itself, but it has no way to pass the password.
+
+**Rollback.** A new image starts *pending verification*. It is confirmed
+once it has run for 20 s and reached Wi-Fi (or opened phone setup). If it
+crashes or resets before that, the bootloader goes back to the previous
+firmware on the next start. The settings page shows `(new, confirming)` next
+to the version in the meantime. Two slots of 6.4 MB are available
+(`default_16MB.csv`); the firmware is about 1.9 MB.
 
 ## AMOLED burn-in protection
 
@@ -377,12 +515,16 @@ measures reduce aging but can't prevent it entirely:
   thin dim line, and there is no static lit panel apart from the small dock.
 - **Quiet idle.** After 90 s without a touch the radar is replaced by a dim
   summary: the aircraft count and the next arrival. Its position changes
-  every minute. This doesn't happen while an arrival is within 4 minutes,
-  and the look-up alert wakes it.
+  every minute. This doesn't happen while a predicted landing is within the
+  wake window (10 minutes by default), and such a landing or the look-up
+  alert wakes it.
 - **Screen off.** After 15 more minutes the panel turns off. The first touch
   only turns it back on.
-- **Night.** From 19:00 to 06:00 colors switch to a warm low-luminance
-  palette, and brightness is capped at 12%.
+- **Night.** From 19:00 to 06:00 colors switch to a warm palette a step
+  below day, and brightness is capped at 35%. The panel's brightness register
+  is nearly linear in light output, so percentages go through a curve with a
+  floor (`lib/radar_core/src/brightness.cpp`): 1% is still visible, 12% gives
+  about 68/255 instead of 31, and 0% turns the panel fully off.
 - **Pixel shift.** Every minute the whole scene moves by up to 2 px in a
   9-position pattern. The design keeps 2 px of margin for this.
 
@@ -399,13 +541,17 @@ lib/radar_core/           portable C++ with no Arduino dependency (tested on the
   adsb_parser.*           readsb / ADSBx-v2 JSON (adsb.fi, adsb.lol) -> Aircraft
   geo.*                   haversine, observer-centered projection with view rotation, look angles
   tracker.*               merge downloads, dead reckoning, trails, expiry
-  traffic.*               per-aircraft distance/direction, arrival/departure/ETA cues
+  traffic.*               per-aircraft distance/direction, arrival/departure/ETA and inbound cues
+  landing_wake.*          when to wake the screen for a landing (once per aircraft)
+  known_networks.*        saved Wi-Fi list: dedupe, LRU cap of 8, join order from a scan
+  brightness.*            percent -> panel brightness register (curve with a floor)
   settings.*              Settings struct, validation, JSON (web page + NVS)
   format.*                text: altitudes, airline/type names, "RIGHT 42°", "~3 MIN", "NW 305°T"
   places.*, coastline_data.cpp   airports with runway thresholds, simplified coastlines
-src/hal/                  board pins, AMOLED panel (SH8601/CO5300), FT3168, LVGL port
-src/net/                  Wi-Fi manager + setup portal, ADS-B downloader, web pages
-src/app/settings_store.*  NVS persistence (settings, Wi-Fi, setup password)
+src/hal/                  board pins, AMOLED panel (SH8601/CO5300), I2C bus, FT3168/CST816 touch, LVGL port
+src/net/                  Wi-Fi manager (several networks) + setup portal, ADS-B downloader, web pages, OTA
+src/app/settings_store.*  NVS persistence (settings, Wi-Fi list, setup and update passwords, guide seen);
+                          missing keys on a fresh device are normal and not logged
 src/ui/                   everything you see; no Wi-Fi/HTTP/NVS/hardware code
   ui_model.h              the only interface: Model (state in) + Actions (intent out)
   theme.*                 day/night palettes and fonts from the design
@@ -415,7 +561,8 @@ src/ui/                   everything you see; no Wi-Fi/HTTP/NVS/hardware code
   screen_radar.cpp        radar screen: header, dock, footer, taps and swipes
   screens_setup.cpp       splash, phone QR, connecting, connected/failed
   screens_info.cpp        detail, look-up alert, quiet idle, balcony alignment
-  ui.*                    routing between screens, gesture recognizer, 5 s hold overlay
+  screens_menu.cpp        menu, gesture guide, firmware update progress
+  ui.*                    routing between screens, gesture recognizer, 5 s hold overlay, notices
 src/sim/sim_main.cpp      host simulator rendering the UI to PNG and checking interactions
 src/main.cpp              app controller: Wi-Fi/feed wiring, alerts, idle/night/screen-off policy
 tools/                    coastline and font generators
@@ -437,7 +584,7 @@ touch drivers, networking or storage. To change fonts or glyph sets, edit
 ## Tests and simulator
 
 ```bash
-pio test -e native                                     # 21 unit tests, no hardware
+pio test -e native                                     # 45 unit tests in 4 suites, no hardware
 pio run -e simulator && .pio/build/simulator/program   # screenshots in sim_out/ + interaction checks
 python3 docs/design/render.py && python3 docs/design/verify.py   # regenerate/verify the design
 ```
@@ -454,6 +601,13 @@ python3 docs/design/render.py && python3 docs/design/verify.py   # regenerate/ve
   traffic, including that cues need track history and fresh data.
 - The tracker, text formatting, settings JSON with clamping and the NVS diff,
   and the coastline.
+- The saved-network list (`test_networks`): newest first, dedupe, the
+  8-network cap, join order from a scan, the JSON round trip, and that the
+  public list has no passwords.
+- Wake for landings (`test_wake`): once per aircraft, the window, off at 0,
+  bounded memory, and the inbound estimate accepting descending inbound
+  traffic but not overflights, climbs, stale data or helicopters.
+- The brightness curve (`test_display`).
 
 **The simulator** runs the real `src/ui` code on LVGL with the device's
 32-line partial buffers. It plays the design's example traffic, as a minute
@@ -466,7 +620,9 @@ through the same gesture recognizer the device uses:
 - the range text and swipes;
 - selecting aircraft, and opening detail from the selection and from the dock;
 - the back chevron and right swipe;
-- night and idle swipes, and tap to wake;
+- night and idle swipes, tap to wake, and that a short or slanted swipe
+  doesn't change the colors;
+- the menu, the phone-link page and back to the menu, the gesture guide;
 - dismissing the alert;
 - the setup buttons;
 - the alignment switch;
@@ -495,7 +651,10 @@ traffic cues, UI rendering and interaction logic were all checked on the host.
      controller with `-DRADAR_PANEL_FORCE=1` (SH8601) or `=2` (CO5300).
    - If it flickers or tears, lower the pixel clock with
      `-DRADAR_PANEL_PCLK_HZ=20000000`.
-2. **Touch and gestures.** Check these:
+2. **Touch and gestures.** The boot log shows `touch: FocalTech controller at
+   0x38 (chip 0x.., fw 0x.., vendor 0x..)` and an `I2C scan:` line. If it says touch is missing, tap
+   the screen once: a dozing controller wakes on touch and is picked up within
+   0.1 s. Then check these:
    - tapping a blip selects it, and a second tap opens the detail;
    - tapping the range text changes the range;
    - swipes work;
@@ -510,11 +669,16 @@ traffic cues, UI rendering and interaction logic were all checked on the host.
 4. **Frame rate and memory.** Build with `-DRADAR_LOG_FPS=1` and watch the
    log. Expect well under one full frame of pixels per second when nothing
    moves, and free internal heap staying above ~40 KB.
-5. **Direction cues.** Once the location is set, open the alignment screen
+5. **Night colors** at the default 35%. They should be clearly readable at
+   arm's length but dimmer than day. Adjust *Night %* on the settings page.
+6. **Firmware update over Wi-Fi.** Try `/update` once with a known-good build
+   and watch the log for `firmware 2.1.0 confirmed` about 20 s after it
+   restarts.
+7. **Direction cues.** Once the location is set, open the alignment screen
    and check that the bearing and "AHEAD/LEFT/RIGHT" match what you see from
    the balcony. Then compare a real arrival's **LOOK RIGHT/LEFT** with where
    it actually appears.
-6. **Coverage.** Compare against an app like Flightradar24 from the balcony.
+8. **Coverage.** Compare against an app like Flightradar24 from the balcony.
    Gaps are almost always the aggregators' receiver coverage (see
    [Data source](#data-source)).
 
