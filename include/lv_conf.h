@@ -10,13 +10,14 @@
 #define LV_COLOR_16_SWAP 1
 #define LV_COLOR_SCREEN_TRANSP 0
 
-// Use the C library allocator. On the device large blocks land in PSRAM
-// (CONFIG_SPIRAM_USE_MALLOC), small ones in internal RAM.
+// LVGL's heap (objects, styles, label text, draw scratch). On the device it
+// goes to PSRAM; plain malloc would keep every block under 4 KB in internal
+// RAM, which Wi-Fi, TLS and DMA need (see lv_mem_hooks.h).
 #define LV_MEM_CUSTOM 1
-#define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
-#define LV_MEM_CUSTOM_ALLOC malloc
-#define LV_MEM_CUSTOM_FREE free
-#define LV_MEM_CUSTOM_REALLOC realloc
+#define LV_MEM_CUSTOM_INCLUDE "lv_mem_hooks.h"
+#define LV_MEM_CUSTOM_ALLOC radar_lv_malloc
+#define LV_MEM_CUSTOM_FREE radar_lv_free
+#define LV_MEM_CUSTOM_REALLOC radar_lv_realloc
 
 #define LV_DISP_DEF_REFR_PERIOD 20
 #define LV_INDEV_DEF_READ_PERIOD 20
