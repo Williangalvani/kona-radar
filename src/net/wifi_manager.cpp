@@ -109,7 +109,7 @@ void WifiManager::connectSaved() {
 }
 
 void WifiManager::startPortal() {
-  if (portalActive()) return;
+  if (!store_ || portalActive()) return;
   lastError_ = "";
   setupError_ = SetupError::None;
   WiFi.setAutoReconnect(false);
@@ -132,6 +132,7 @@ void WifiManager::stopAccessPoint() {
 }
 
 void WifiManager::resetAndStartPortal() {
+  if (!store_) return;
   log_i("forgetting Wi-Fi \"%s\"", savedSsid_.c_str());
   store_->forgetWifi();
   savedSsid_ = savedPass_ = "";
@@ -226,6 +227,7 @@ String WifiManager::scanJson() {
 }
 
 void WifiManager::loop() {
+  if (!store_) return;
   const uint32_t now = millis();
   if (portalActive()) dns_.processNextRequest();
 

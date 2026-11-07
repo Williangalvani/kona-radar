@@ -75,6 +75,7 @@ void WebUi::begin(WifiManager* wifi, Hooks hooks) {
 }
 
 void WebUi::loop() {
+  if (!wifi_) return;
   server_.handleClient();
   if (!mdnsStarted_ && wifi_->online()) {
     if (MDNS.begin(RADAR_HOSTNAME)) {

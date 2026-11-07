@@ -31,8 +31,12 @@ class Lock {
 const char* AdsbClient::sourceName(uint8_t source) { return source == 1 ? "adsb.lol" : "adsb.fi"; }
 
 void AdsbClient::begin() {
-  mutex_ = xSemaphoreCreateMutex();
-  xTaskCreatePinnedToCore(taskEntry, "adsb", 12 * 1024, this, 1, &task_, 0);
+  if (!mutex_) mutex_ = xSemaphoreCreateMutex();
+  if (task_) return;
+  if (xTaskCreatePinnedToCore(taskEntry, "adsb", 12 * 1024, this, 1, &task_, 0) != pdPASS) {
+    task_ = nullptr;
+    log_e("cannot start the download task");
+  }
 }
 
 void AdsbClient::configure(radar::LatLon center, uint16_t radiusNm, uint16_t intervalS,

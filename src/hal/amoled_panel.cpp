@@ -197,9 +197,10 @@ bool AmoledPanel::begin(size_t maxTransferBytes, FlushDoneCb onDone, void* ctx) 
   return true;
 }
 
-void AmoledPanel::drawBitmap(int x1, int y1, int x2, int y2, const void* pixels) {
-  esp_lcd_panel_draw_bitmap(static_cast<esp_lcd_panel_handle_t>(panel_), x1, y1, x2 + 1, y2 + 1,
-                            pixels);
+bool AmoledPanel::drawBitmap(int x1, int y1, int x2, int y2, const void* pixels) {
+  if (!panel_) return false;
+  return esp_lcd_panel_draw_bitmap(static_cast<esp_lcd_panel_handle_t>(panel_), x1, y1, x2 + 1, y2 + 1, pixels) ==
+         ESP_OK;
 }
 
 void AmoledPanel::setBrightness(uint8_t percent) {

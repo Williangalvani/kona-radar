@@ -36,14 +36,18 @@ void flushCb(lv_disp_drv_t*, const lv_area_t* a, lv_color_t* px) {
   ++g_statFlushes;
   g_statPixels += static_cast<uint32_t>(lw * lh);
   const uint8_t rot = g_rotation;
-  if (rot == 0) {
-    g_panel->drawBitmap(a->x1, a->y1, a->x2, a->y2, px);
-    return;
+  bool sent;
+  if (rot == 0 || !g_rotBuf) {
+    sent = g_panel->drawBitmap(a->x1, a->y1, a->x2, a->y2, px);
+  } else {
+    int x1, y1, x2, y2;
+    radar::rotateArea(rot, LCD_WIDTH, LCD_HEIGHT, a->x1, a->y1, a->x2, a->y2, x1, y1, x2, y2);
+    radar::rotateBlock16(rot, reinterpret_cast<const uint16_t*>(px), g_rotBuf, lw, lh);
+    sent = g_panel->drawBitmap(x1, y1, x2, y2, g_rotBuf);
   }
-  int x1, y1, x2, y2;
-  radar::rotateArea(rot, LCD_WIDTH, LCD_HEIGHT, a->x1, a->y1, a->x2, a->y2, x1, y1, x2, y2);
-  radar::rotateBlock16(rot, reinterpret_cast<const uint16_t*>(px), g_rotBuf, lw, lh);
-  g_panel->drawBitmap(x1, y1, x2, y2, g_rotBuf);
+  // Without a transfer there is no completion interrupt; LVGL would wait
+  // for it forever.
+  if (!sent) lv_disp_flush_ready(&g_dispDrv);
 }
 
 // The controllers update in 2x2 pixel units: start on even, end on odd.
@@ -55,8 +59,8 @@ void rounderCb(lv_disp_drv_t*, lv_area_t* a) {
 }
 
 void touchCb(lv_indev_drv_t*, lv_indev_data_t* data) {
-  uint16_t tx, ty;
-  const bool pressed = g_touch->read(tx, ty);
+  uint16_t tx = 0, ty = 0;
+  const bool pressed = g_touch && g_touch->read(tx, ty);
   if (pressed) {
     g_lastTouchMs = millis();
     if (!g_wasPressed) g_swallowing = g_touchHook && g_touchHook();
@@ -85,16 +89,21 @@ void* dmaAlloc(size_t bytes) {
 bool lvglPortBegin(AmoledPanel& panel, TouchFt3168& touch) {
   g_panel = &panel;
   g_touch = &touch;
-  if (!panel.begin(kBufPixels * sizeof(lv_color_t), onPanelDone, nullptr)) return false;
+  const bool panelOk = panel.begin(kBufPixels * sizeof(lv_color_t), onPanelDone, nullptr);
 
+  // LVGL is set up even without a panel: the UI and the rest of the app keep
+  // running (Wi-Fi, web pages, OTA), and flushes complete immediately.
   lv_init();
   auto* buf1 = static_cast<lv_color_t*>(dmaAlloc(kBufPixels * sizeof(lv_color_t)));
   auto* buf2 = static_cast<lv_color_t*>(dmaAlloc(kBufPixels * sizeof(lv_color_t)));
   g_rotBuf = static_cast<uint16_t*>(dmaAlloc(kBufPixels * sizeof(uint16_t)));
-  if (!buf1 || !buf2 || !g_rotBuf) {
+  if (!buf1) {
     log_e("out of DMA memory for LVGL buffers");
-    return false;
+    buf1 = static_cast<lv_color_t*>(heap_caps_malloc(kBufPixels * sizeof(lv_color_t), MALLOC_CAP_8BIT));
+    if (!buf1) return false;
   }
+  if (!buf2) log_w("single LVGL buffer");
+  if (!g_rotBuf) log_w("no rotation buffer; screen rotation disabled");
   lv_disp_draw_buf_init(&g_drawBuf, buf1, buf2, kBufPixels);
 
   lv_disp_drv_init(&g_dispDrv);
@@ -112,12 +121,12 @@ bool lvglPortBegin(AmoledPanel& panel, TouchFt3168& touch) {
   g_indevDrv.long_press_time = 1200;
   g_indevDrv.scroll_limit = 12;
   lv_indev_drv_register(&g_indevDrv);
-  return true;
+  return panelOk;
 }
 
 void lvglPortSetRotation(uint8_t quarterTurns) {
-  g_rotation = quarterTurns & 3;
-  lv_obj_invalidate(lv_scr_act());
+  g_rotation = g_rotBuf ? (quarterTurns & 3) : 0;
+  if (lv_disp_get_default()) lv_obj_invalidate(lv_scr_act());
 }
 
 void lvglPortSetTouchStartHook(TouchStartHook hook) { g_touchHook = hook; }

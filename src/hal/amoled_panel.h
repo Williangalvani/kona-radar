@@ -27,10 +27,14 @@ class AmoledPanel {
   uint8_t rawId() const { return rawId_; }
   const char* name() const { return type_ == PanelType::SH8601 ? "SH8601" : "CO5300"; }
 
+  // True once begin() succeeded.
+  bool ready() const { return panel_ != nullptr; }
+
   // Sends an inclusive rectangle of RGB565 big-endian pixels (asynchronous,
   // DMA). The buffer must stay valid until the done callback fires. x1/y1
   // must be even and x2/y2 odd (the controllers work on 2x2 pixel pairs).
-  void drawBitmap(int x1, int y1, int x2, int y2, const void* pixels);
+  // Returns false (and the done callback will not fire) if nothing was sent.
+  bool drawBitmap(int x1, int y1, int x2, int y2, const void* pixels);
 
   // 0..100 %. 0 keeps the panel on at its minimum level.
   void setBrightness(uint8_t percent);
