@@ -102,6 +102,14 @@ bool AdsbClient::fetchOnce(uint8_t source, std::vector<radar::Aircraft>& out, Fe
     init[i] = true;
   }
 
+  // An idle session to the other source holds ~40 KB of internal RAM
+  // (mbedTLS buffers) until it is stopped.
+  const int other = 1 - i;
+  if (init[other] && tls[other].connected()) {
+    http[other].end();
+    tls[other].stop();
+  }
+
   st.httpCode = 0;
   if (!http[i].begin(tls[i], url)) {
     snprintf(st.error, sizeof(st.error), "bad URL");

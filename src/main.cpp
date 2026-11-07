@@ -82,6 +82,8 @@ uint32_t g_onlineSinceMs = 0;
 constexpr uint32_t kIpNoticeMs = 20000;
 uint32_t g_lastExpireMs = 0;
 uint32_t g_lastStatsMs = 0;
+uint32_t g_lastHeapLogMs = 0;
+constexpr uint32_t kHeapLogMs = 10 * 60 * 1000;
 
 constexpr uint32_t kSplashMs = 2500;
 constexpr uint32_t kAlertMaxMs = 120000;
@@ -339,6 +341,12 @@ void pollBootButton(uint32_t now) {
   }
 }
 
+void logHeap() {
+  log_i("heap: internal %u free (min %u, largest block %u), psram %u free", ESP.getFreeHeap(),
+        heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+        ESP.getFreePsram());
+}
+
 String statusJson() {
   const net::FeedStatus st = g_adsb.status();
   String s = "{\"version\":\"" RADAR_FW_VERSION "\",\"aircraft\":";
@@ -371,6 +379,10 @@ String statusJson() {
   s += millis() / 1000;
   s += ",\"freeHeap\":";
   s += ESP.getFreeHeap();
+  s += ",\"minFreeHeap\":";
+  s += heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+  s += ",\"largestFreeBlock\":";
+  s += heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   s += ",\"freePsram\":";
   s += ESP.getFreePsram();
   s += "}";
@@ -491,7 +503,7 @@ void setup() {
   configureFeed();
   g_adsb.begin();
   g_lastActivityMs = g_lastBrightnessMs = g_lastShiftMs = millis();
-  log_i("heap %u, psram %u", ESP.getFreeHeap(), ESP.getFreePsram());
+  logHeap();
 }
 
 void loop() {
@@ -531,6 +543,12 @@ void loop() {
     updatePixelShift(now);
     g_ui.update(g_model);
     lv_timer_handler();
+  }
+
+  // A slow leak shows as "min" and "largest" creeping down over hours.
+  if (now - g_lastHeapLogMs > kHeapLogMs) {
+    g_lastHeapLogMs = now;
+    logHeap();
   }
 
   if (RADAR_LOG_FPS && now - g_lastStatsMs > 5000) {
