@@ -43,6 +43,9 @@ std::string speedText(const radar::Aircraft& a) {
   return buf;
 }
 
+constexpr uint32_t kHintsMs = 6000;
+constexpr int kMenuX = 374, kMenuY = 115;
+
 }  // namespace
 
 void RadarScreen::build(lv_obj_t* parent) {
@@ -53,12 +56,14 @@ void RadarScreen::build(lv_obj_t* parent) {
                     {58, 112, 126, 141},
                     {88, 334, 378, 412},
                     {140, 424, 326, 446},
-                    {348, 172, 400, 210}});
+                    {348, 172, 400, 210},
+                    {340, 112, 408, 141}});
 
   headerBox_ = panel(root_, 100, 34, 366, 91, 8, 0x000000, 0x000000, false);
   title_.create(root_, 233, 41, font::bold(26), p.title, Align::Center, 2);
   mode_.create(root_, 233, 73, font::mono(13), p.accent);
   count_.create(root_, 92, 115, 11);
+  menu_.create(root_, kMenuX, kMenuY, 11);
   outsideCount_.create(root_, 374, 176, font::mono(13), p.amber);
   outsideLabel_.create(root_, 374, 194, font::mono(10), p.muted);
   outsideLabel_.set("OUTSIDE");
@@ -69,6 +74,29 @@ void RadarScreen::build(lv_obj_t* parent) {
   dockTopRight_.create(root_, 354, 350, font::medium(16), p.muted, Align::Right);
   dockBottomRight_.create(root_, 354, 377, font::bold(18), p.amber, Align::Right);
   footer(root_, footer_, "", p.quiet);
+
+  // Swipe hints at the edges (shown for a few seconds, see showHints()).
+  hints_[0].create(root_, 16, 226, font::mono(10), p.muted, Align::Left, 1);
+  hints_[0].set("\xE2\x86\x92 ZOOM IN");
+  hints_[1].create(root_, 450, 226, font::mono(10), p.muted, Align::Right, 1);
+  hints_[1].set("ZOOM OUT \xE2\x86\x90");
+  hints_[2].create(root_, 233, 100, font::mono(10), p.muted, Align::Center, 1);
+  hints_[2].set("\xE2\x86\x93 QUIET SCREEN");
+  hints_[3].create(root_, 233, 318, font::mono(10), p.muted, Align::Center, 1);
+  for (Text& h : hints_) h.show(false);
+  hintsShown_ = false;
+}
+
+void RadarScreen::refreshHints(const Model& m) {
+  if (hintsRequested_) {
+    hintsRequested_ = false;
+    hintsUntilMs_ = m.nowMs + kHintsMs;
+  }
+  const bool show = static_cast<int32_t>(hintsUntilMs_ - m.nowMs) > 0;
+  hints_[3].set(m.night ? "\xE2\x86\x91 DAY COLORS" : "\xE2\x86\x91 NIGHT COLORS");
+  if (show == hintsShown_) return;
+  hintsShown_ = show;
+  for (Text& h : hints_) h.show(show);
 }
 
 void RadarScreen::refresh(const Model& m) {
@@ -103,6 +131,8 @@ void RadarScreen::refresh(const Model& m) {
   char buf[24];
   std::snprintf(buf, sizeof(buf), "%d ACFT", m.summary.inRange);
   count_.set(buf, p.muted, p.panel, p.panelLine);
+  refreshHints(m);
+  menu_.set("MENU", hintsShown_ ? p.accent : p.muted, p.panel, hintsShown_ ? p.accentDim : p.panelLine);
   const bool outside = m.summary.outside > 0;
   std::snprintf(buf, sizeof(buf), "+%d", m.summary.outside);
   outsideCount_.set(buf);
@@ -132,8 +162,14 @@ void RadarScreen::refresh(const Model& m) {
       f = "SET YOUR LOCATION ON PHONE";
     }
   }
-  // "NIGHT" is a hint the colors already give; drop it when the line is full.
-  if (m.night && footer_.fits("NIGHT \xC2\xB7 " + f)) f = "NIGHT \xC2\xB7 " + f;
+  if (m.ipNotice && m.online && !m.lanIp.empty() && !m.exampleData) {
+    f = "CONNECTED \xC2\xB7 " + m.lanIp;
+    if (!footer_.fits(f)) f = m.lanIp;
+    fc = p.sage;
+  } else if (m.night && footer_.fits("NIGHT \xC2\xB7 " + f)) {
+    // "NIGHT" is a hint the colors already give; drop it when the line is full.
+    f = "NIGHT \xC2\xB7 " + f;
+  }
   footer_.set(f);
   footer_.setColor(fc);
 }
@@ -228,6 +264,10 @@ void RadarScreen::cycleRange(int dir) {
 }
 
 void RadarScreen::tap(int x, int y) {
+  if (x >= 330 && x <= 425 && y >= 104 && y <= 152) {
+    if (nav_) nav_->openMenu();
+    return;
+  }
   if (y >= 30 && y <= 100 && x >= 100 && x <= 366) {
     if (x >= 255)
       cycleRange(1);
@@ -242,6 +282,7 @@ void RadarScreen::tap(int x, int y) {
   const std::vector<std::string> hits = view_.hitTest(x, y);
   if (hits.empty()) {
     userFocus_.clear();
+    showHints();
     return;
   }
   for (size_t i = 0; i < hits.size(); ++i) {
@@ -266,6 +307,10 @@ void RadarScreen::swipe(Swipe s) {
       break;
     case Swipe::Up:
       if (actions_) actions_->toggleNight();
+      // Without this it is easy to think the screen is stuck dark.
+      if (nav_ && m_)
+        nav_->notify(m_->night ? "Day colors" : "Night colors",
+                     m_->night ? "SWIPE UP AGAIN FOR NIGHT" : "SWIPE UP AGAIN FOR DAY");
       break;
     case Swipe::Down:
       if (actions_) actions_->goIdle();

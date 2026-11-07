@@ -222,7 +222,7 @@ struct SimApp : ui::Actions {
   ui::Model model;
   radar::Tracker tracker;
   std::vector<radar::Target> targets;
-  int wifiResets = 0, retries = 0, opened = 0;
+  int wifiResets = 0, retries = 0, opened = 0, guidesClosed = 0;
   std::string dismissed;
   void setRange(uint16_t nm) override { model.settings.rangeNm = nm; }
   void setNorthUp(bool on) override { model.settings.northUp = on; }
@@ -238,6 +238,10 @@ struct SimApp : ui::Actions {
     model.phase = ui::Phase::SetupJoin;
   }
   void resetWifi() override { ++wifiResets; }
+  void guideDone() override {
+    ++guidesClosed;
+    model.guidePending = false;
+  }
   void dismissAlert(const char* hex) override {
     dismissed = hex;
     model.alertHex.clear();
@@ -591,6 +595,8 @@ int main() {
   m.wifiSsid = "Balcony Wi-Fi";
   m.lanIp = "192.168.1.42";
   m.lanHost = std::string(RADAR_HOSTNAME) + ".local";
+  m.firmwareVersion = RADAR_FW_VERSION;
+  m.otaPassword = "48151623";
   m.feedSource = "adsb.fi";
   m.exampleData = true;
 
@@ -724,6 +730,57 @@ int main() {
   run(300);
   shot("13_phone_settings_link");
   tap(233, 233);
+  run(300);
+
+  std::printf("menu, guide, hints\n");
+  tap(374, 127);
+  run(300);
+  shot("18_menu");
+  tap(233, 134);
+  run(300);
+  shot("18b_menu_phone_link");
+  tap(233, 233);
+  run(300);
+  shot("18c_back_to_menu");
+  tap(233, 238);
+  run(400);
+  expect(m.night, "menu toggles night colors");
+  tap(233, 238);
+  run(400);
+  expect(!m.night, "and back");
+  tap(233, 342);
+  run(300);
+  shot("19_guide_tap");
+  tap(233, 233);
+  run(200);
+  shot("19b_guide_swipe");
+  tap(233, 233);
+  run(200);
+  shot("19c_guide_hold");
+  tap(233, 233);
+  run(300);
+  expect(g_app.guidesClosed == 1, "the guide closes after its last page");
+  shot("20_radar_hints");
+  run(6500);
+  swipe(233, 300, 233, 150);
+  run(300);
+  shot("21_night_toast");
+  expect(m.night, "swipe up still switches to night");
+  swipe(233, 300, 233, 150);
+  run(4000);
+  swipe(233, 300, 260, 245);
+  run(300);
+  expect(!m.night, "a short or slanted swipe up does not change the colors");
+  m.ipNotice = true;
+  m.exampleData = false;
+  run(300);
+  shot("22_radar_connected_ip");
+  m.ipNotice = false;
+  m.exampleData = true;
+  m.otaProgress = 42;
+  run(300);
+  shot("23_firmware_update");
+  m.otaProgress = -1;
   run(300);
 
   std::printf("hold to reset Wi-Fi\n");

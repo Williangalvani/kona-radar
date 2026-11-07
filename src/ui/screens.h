@@ -22,7 +22,11 @@ class Nav {
   virtual void openDetail(const std::string& hex) = 0;
   virtual void openAlignment() = 0;
   virtual void openPhoneLink() = 0;
+  virtual void openMenu() = 0;
+  virtual void openGuide() = 0;
   virtual void back() = 0;
+  // Short message over the current screen ("Night colors on").
+  virtual void notify(const std::string& title, const std::string& sub) = 0;
 };
 
 class Screen {
@@ -66,8 +70,9 @@ class SetupQrScreen : public Screen {
  public:
   void build(lv_obj_t* parent) override;
   void refresh(const Model& m) override;
-  // Also used for the "edit on phone" link to the settings page.
-  void showLink(const std::string& url);
+  // Also used for the "edit on phone" link to the settings page (by IP:
+  // Android phones do not resolve .local names).
+  void showLink(bool on) { linkMode_ = on; }
 
  private:
   void setQr(const std::string& data);
@@ -76,7 +81,6 @@ class SetupQrScreen : public Screen {
   lv_obj_t* qr_ = nullptr;
   std::string qrData_;
   bool linkMode_ = false;
-  std::string linkUrl_;
 
   friend class Ui;
 };
@@ -121,15 +125,22 @@ class RadarScreen : public Screen {
   void swipe(Swipe s) override;
   const std::string& focus() const { return focus_; }
   void select(const std::string& hex) { userFocus_ = hex; }
+  // Shows the swipe hints at the screen edges for a few seconds.
+  void showHints() { hintsRequested_ = true; }
 
  private:
   void refreshDock(const Model& m, const radar::Target* t);
+  void refreshHints(const Model& m);
   void cycleRange(int dir);
 
   RadarView view_;
   lv_obj_t* headerBox_ = nullptr;
   Text title_, mode_, outsideCount_, outsideLabel_, footer_;
-  Tag count_;
+  Tag count_, menu_;
+  Text hints_[4];
+  bool hintsRequested_ = false;
+  bool hintsShown_ = false;
+  uint32_t hintsUntilMs_ = 0;
   lv_obj_t* dock_ = nullptr;
   Text dockKind_, dockMain_, dockTopRight_, dockBottomRight_, dockHint_;
   std::string userFocus_;
@@ -200,6 +211,56 @@ class AlignmentScreen : public Screen {
   bool northUp_ = false;
   float runwayRel_ = -96;
   bool known_ = true;
+};
+
+// Menu: the way to every page, plus the address and update password.
+class MenuScreen : public Screen {
+ public:
+  static constexpr int kItems = 5;
+  void build(lv_obj_t* parent) override;
+  void refresh(const Model& m) override;
+  void tap(int x, int y) override;
+  void press(int x, int y, bool down) override;
+  void swipe(Swipe s) override;
+
+ private:
+  int itemAt(int x, int y) const;
+  Sketch art_;
+  Text title_, labels_[kItems], values_[kItems], ip_, ota_, footer_;
+  lv_obj_t* rows_[kItems] = {};
+  int pressed_ = -1;
+};
+
+// First-run gesture guide (also from the menu): three pages, tap to go on.
+class GuideScreen : public Screen {
+ public:
+  static constexpr int kPages = 3;
+  void build(lv_obj_t* parent) override;
+  void refresh(const Model& m) override;
+  void tap(int x, int y) override;
+  void swipe(Swipe s) override;
+  void restart();
+  // Set when the last page was tapped; the Ui closes the guide.
+  bool finished() const { return finished_; }
+
+ private:
+  void setPage(int page);
+  Sketch art_;
+  Text title_, heading_, lines_[3], footer_;
+  int page_ = 0;
+  bool finished_ = false;
+};
+
+// Firmware update in progress.
+class UpdateScreen : public Screen {
+ public:
+  void build(lv_obj_t* parent) override;
+  void refresh(const Model& m) override;
+
+ private:
+  Sketch art_;
+  Text title_, heading_, percent_, body_, footer_;
+  int pct_ = -1;
 };
 
 // Shared helpers for screens.
