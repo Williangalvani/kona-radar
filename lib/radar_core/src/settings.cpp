@@ -70,6 +70,7 @@ Settings Settings::defaults() {
   s.nightMode = RADAR_NIGHT_MODE;
   s.blackoutS = RADAR_BLACKOUT_S;
   s.alerts = 1;
+  s.landingWakeMin = RADAR_LANDING_WAKE_MIN;
   s.sanitize();
   return s;
 }
@@ -129,6 +130,7 @@ bool Settings::sanitize() {
   changed |= clampField<uint8_t>(nightMode, 0, 2);
   changed |= clampField<uint16_t>(blackoutS, 0, 36000);
   changed |= clampField<uint8_t>(alerts, 0, 1);
+  changed |= clampField<uint8_t>(landingWakeMin, 0, 30);
 
   centerName[sizeof(centerName) - 1] = 0;
   size_t n = 0;
@@ -184,6 +186,7 @@ void toDoc(const Settings& s, JsonDocument& doc) {
   doc["nightMode"] = s.nightMode;
   doc["blackoutS"] = s.blackoutS;
   doc["alerts"] = s.alerts;
+  doc["landingWakeMin"] = s.landingWakeMin;
 }
 
 }  // namespace
@@ -243,6 +246,7 @@ bool settingsFromJson(const char* json, size_t len, Settings& s, std::string* er
   readField(o, "nightMode", n.nightMode);
   readField(o, "blackoutS", n.blackoutS);
   readField(o, "alerts", n.alerts);
+  readField(o, "landingWakeMin", n.landingWakeMin);
   n.sanitize();
   s = n;
   return true;
