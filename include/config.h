@@ -168,7 +168,7 @@
 #endif
 // Panel brightness at night, percent (runtime).
 #ifndef RADAR_NIGHT_BRIGHTNESS
-#define RADAR_NIGHT_BRIGHTNESS 12
+#define RADAR_NIGHT_BRIGHTNESS 35
 #endif
 // Enter the dim idle screen after this many seconds without touch and
 // without an aircraft about to land (runtime, 0 disables).

@@ -29,30 +29,32 @@ const Palette kDay = {
     0x97A7A9,  // northLabel
 };
 
+// Warm and a step below day, but every role stays readable at arm's length
+// on the real panel at the default night brightness.
 const Palette kNight = {
     true,
-    0xD1945D,  // text
-    0xA66C45,  // title
-    0xA66C45,  // muted
-    0x6E4A30,  // quiet
-    0xA66C45,  // accent
-    0x4E2D1E,  // accentDim
-    0xD1945D,  // amber
-    0xD1945D,  // sage
-    0xD1945D,  // coral
-    0x291C14,  // grid
-    0x342419,  // coast
-    0x100B07,  // panel
-    0x472D1A,  // panelLine
-    0x1D1A12,  // cone
-    0xA66C45,  // runway
-    0x493020,  // arrivalLine
-    0xD1945D,  // plane
-    0xD1945D,  // planeDeparture
-    0xD1945D,  // planeFocus
-    0xD1945D,  // observer
-    0x4A3222,  // mutedTarget
-    0xA66C45,  // northLabel
+    0xFFC48A,  // text
+    0xF2B57C,  // title
+    0xD9A06C,  // muted
+    0xAE7C52,  // quiet
+    0xF5AE68,  // accent
+    0x80522F,  // accentDim
+    0xFFB75E,  // amber
+    0xE6C37E,  // sage
+    0xFF8F66,  // coral
+    0x4D3523,  // grid
+    0x5C412B,  // coast
+    0x1C120B,  // panel
+    0x6B4629,  // panelLine
+    0x33241A,  // cone
+    0xE6AA70,  // runway
+    0x8C5C33,  // arrivalLine
+    0xEFB274,  // plane
+    0xE6C37E,  // planeDeparture
+    0xFFD07A,  // planeFocus
+    0xFFD3A6,  // observer
+    0x8F6642,  // mutedTarget
+    0xD9A06C,  // northLabel
 };
 
 const Palette* g_current = &kDay;

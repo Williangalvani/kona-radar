@@ -8,6 +8,7 @@
 #include <esp_rom_sys.h>
 
 #include "board_pins.h"
+#include "brightness.h"
 #include "config.h"
 #include "esp_lcd_sh8601.h"
 
@@ -217,7 +218,7 @@ void AmoledPanel::setBrightness(uint8_t percent) {
   if (!io_) return;
   if (percent > 100) percent = 100;
   brightness_ = percent;
-  const uint8_t level = static_cast<uint8_t>(1 + (percent * 254 + 50) / 100);
+  const uint8_t level = radar::panelLevel(percent);
   esp_lcd_panel_io_tx_param(static_cast<esp_lcd_panel_io_handle_t>(io_),
                             static_cast<int>((kOpWriteCmd << 24) | (0x51 << 8)), &level, 1);
 }

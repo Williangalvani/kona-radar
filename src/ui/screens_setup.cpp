@@ -192,13 +192,13 @@ void ResultScreen::build(lv_obj_t* parent) {
   art_.create(root_, [this](draw::Surface& s) {
     const Palette& p = palette();
     if (kind_ == Kind::Connected) {
-      draw::fillCircle(s, 233, 224, 60, col(p.night ? 0x100B07 : 0x0B1610));
-      draw::ring(s, 233, 224, 59.5f, 1, col(p.night ? 0x472D1A : 0x294635));
+      draw::fillCircle(s, 233, 224, 60, col(p.night ? p.panel : 0x0B1610));
+      draw::ring(s, 233, 224, 59.5f, 1, col(p.night ? p.panelLine : 0x294635));
       const draw::Point check[3] = {{233 - 21, 225}, {233 - 6.3f, 225 + 14.7f}, {233 + 23.8f, 225 - 18.2f}};
       draw::polyline(s, check, 3, 4, col(p.sage));
     } else {
-      draw::fillCircle(s, 233, 201, 52, col(p.night ? 0x100B07 : 0x1B0D08));
-      draw::ring(s, 233, 201, 51.5f, 1, col(p.night ? 0x472D1A : 0x593024));
+      draw::fillCircle(s, 233, 201, 52, col(p.night ? p.panel : 0x1B0D08));
+      draw::ring(s, 233, 201, 51.5f, 1, col(p.night ? p.panelLine : 0x593024));
       draw::segment(s, 233, 177, 233, 211, 4, col(p.coral));
       draw::fillCircle(s, 233, 226, 3, col(p.coral));
     }
